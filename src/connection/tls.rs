@@ -11,7 +11,10 @@ use windows::{
 use wry::WebViewExtWindows;
 
 pub fn fingerprint(der: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(der))
+    Sha256::digest(der)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 pub fn same_origin(value: &str, expected: &url::Origin) -> bool {
@@ -67,6 +70,14 @@ pub fn install(webview: &wry::WebView, origin: url::Origin, fingerprint: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fingerprint_is_lowercase_sha256() {
+        assert_eq!(
+            fingerprint(b"hello"),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+    }
+
     #[test]
     fn certificate_exception_is_origin_scoped() {
         let origin = url::Url::parse("https://192.0.2.10").unwrap().origin();
