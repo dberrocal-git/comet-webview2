@@ -40,10 +40,9 @@
     .capture[data-active=true] {background:var(--capture-bg);border-color:var(--capture-line);color:var(--selection-ink);}
     .capture[data-active=true] .active-dot {display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--blue);}
     .spacer {flex:1;}
-    .stats,.section {font-size:11px;white-space:nowrap;color:var(--hint);}
-    .stats {font-variant-numeric:tabular-nums;margin-right:4px;}
+    .section {font-size:11px;white-space:nowrap;color:var(--hint);}
     .fullscreen,.theme-toggle {width:30px;padding:5px;}
-    @media(max-width:1000px) {.stats{display:none;}body{gap:8px;}select{max-width:160px;}}
+    @media(max-width:1000px) {body{gap:8px;}select{max-width:160px;}}
   .theme-toggle .sun{display:none}:root[data-theme=dark] .theme-toggle .sun{display:block}:root[data-theme=dark] .theme-toggle .moon{display:none}
   </style>
 </head>
@@ -59,10 +58,9 @@
   </div>
   <span class="spacer"></span>
   <div id="remote-controls" class="group" hidden>
-    <span class="stats"></span>
     <button class="capture" disabled title="Keyboard capture"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="5" width="16" height="10" rx="2"/><path d="M5 8h1m2 0h1m2 0h1m2 0h1M5 11h1m2 0h1m2 0h1m2 0h1M7 13h6"/></svg><span class="active-dot"></span><span class="button-label" id="capture-label">Keyboard ready</span></button>
   </div>
-  <button id="pin" type="button" class="pin" hidden aria-pressed="false" aria-label="Pin toolbar in full screen"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8m-7 0v5l-2.5 3v1h11v-1L13 8V3m-3 9v5"/></svg></button>
+  <button id="pin" type="button" class="pin" hidden aria-pressed="false" aria-label="Pin toolbar"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8m-7 0v5l-2.5 3v1h11v-1L13 8V3m-3 9v5"/></svg></button>
   <button class="fullscreen" data-i18n-title="toolbar.fullscreen" title="Full screen" data-i18n-aria-label="toolbar.fullscreen" aria-label="Full screen"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3H3v4m0-4 5 5m5 9h4v-4m0 4-5-5"/></svg></button>
   <script src="/toolbar.js"></script>
 </body>

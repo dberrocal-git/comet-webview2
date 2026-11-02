@@ -84,13 +84,13 @@ const state={profiles:[profile],selected_id:profile.id,form_version:1,busy:false
   assert.equal(h.get('capture-label').textContent,'Keyboard off');
   h.get('theme-toggle').onclick();assert.equal(h.messages.at(-1).kind,'toggle_theme');
   h.context.cometUI.setTheme('light');assert.equal(h.context.document.documentElement.dataset.theme,'light');
-  assert.equal(h.get('.stats').textContent,'2560 × 1440 · 60 FPS');
 }
 assert.ok(!fs.readFileSync(new URL('../src/ui/manager.html',import.meta.url),'utf8').includes('id="username"'));
 {
   const html=fs.readFileSync(new URL('../src/ui/toolbar.html',import.meta.url),'utf8');
   const body=html.slice(html.indexOf('<body>'),html.indexOf('</body>'));
   assert.ok(!body.includes('class="brand"'),'the window title replaces toolbar branding');
+  assert.ok(!body.includes('class="stats"'),'stream information is provided by the KVM');
   assert.ok(body.indexOf('id="theme-toggle"') < body.indexOf('id="connection-group"'));
   assert.ok(body.indexOf('id="pin"') > body.indexOf('id="remote-controls"'));
   assert.ok(body.indexOf('id="pin"') < body.indexOf('class="fullscreen"'));
@@ -129,11 +129,11 @@ assert.ok(!fs.readFileSync(new URL('../src/ui/manager.html',import.meta.url),'ut
   toolbar.profiles({...session,viewer_id:null,selected_id:'missing'});
   assert.equal(select.value,profile.id,'select the first saved device if no valid selection exists');
   const doc=h.context.document.documentElement;
-  toolbar.layout({autoHide:true,collapsed:true,fullscreen:true,pinned:false});
+  toolbar.layout({autoHide:true,collapsed:true,fullscreen:false,pinned:false});
   assert.equal(doc.dataset.collapsed,'true');
   doc.onpointerenter();
   assert.equal(h.messages.at(-1).visible,true);
-  toolbar.layout({autoHide:true,collapsed:false,fullscreen:true,pinned:false});
+  toolbar.layout({autoHide:true,collapsed:false,fullscreen:false,pinned:false});
   doc.onpointerleave();h.events.get('timer')();
   assert.equal(h.messages.at(-1).visible,false);
   toolbar.layout({autoHide:false,collapsed:false,fullscreen:true,pinned:true});

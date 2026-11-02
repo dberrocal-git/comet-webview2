@@ -21,9 +21,7 @@ impl ToolbarAnimation {
 
 impl App {
     pub(super) fn auto_hide_toolbar(&self) -> bool {
-        self.window.fullscreen().is_some()
-            && !self.manager_visible
-            && !self.preferences.settings.toolbar_pinned
+        !self.manager_visible && !self.preferences.settings.toolbar_pinned
     }
     pub(super) fn resize(&mut self) {
         let auto_hide = self.auto_hide_toolbar();
@@ -40,7 +38,7 @@ impl App {
             .map(|animation| animation.to)
             .unwrap_or(self.toolbar_height);
         if (target - current_target).abs() > f64::EPSILON {
-            if self.window.fullscreen().is_some() && !self.manager_visible && animations_enabled() {
+            if !self.manager_visible && animations_enabled() {
                 self.toolbar_animation = Some(ToolbarAnimation {
                     from: self.toolbar_height,
                     to: target,

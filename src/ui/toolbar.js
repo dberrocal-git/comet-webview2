@@ -1,7 +1,6 @@
 (() => {
   const {$, t, ipc, setHint, profileList} = window.cometUI;
-  const button = document.querySelector('.capture'), stats = document.querySelector('.stats'),
-        select = $('profiles');
+  const button = document.querySelector('.capture'), select = $('profiles');
   let captureEnabled = window.cometSettings?.keyboard_capture !== false;
   const renderOptions = profileList(select, id => {
     const node = document.createElement('option');
@@ -65,8 +64,6 @@
       captureEnabled = state.capture_enabled !== false;
       setCaptured(state.captured, state.basic);
       button.disabled = !state.width;
-      stats.textContent =
-          state.width ? state.width + ' × ' + state.height + ' · ' + state.fps.toFixed(0) + ' FPS' : '';
     },
     profiles(state) {
       const previous = select.value;

@@ -46,7 +46,6 @@ struct ViewerStats {
     connected: bool,
     width: u32,
     height: u32,
-    fps: f64,
     hid_packets: u64,
     #[serde(default)]
     browser_lock_requests: u64,
@@ -402,8 +401,6 @@ impl App {
             "basic": self.capture_requested && !self.capture.enabled(),
             "capture_enabled": self.preferences.settings.keyboard_capture,
             "width": if self.manager_visible { 0 } else { self.stats.width },
-            "height": self.stats.height,
-            "fps": self.stats.fps,
         });
         let _ = self
             .toolbar
