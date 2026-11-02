@@ -14,6 +14,8 @@ When you access your Comet KVM through a browser, the browser may handle keyboar
 
 **Remember password** saves the password encrypted for your Windows account. Profiles and settings are stored in `%LOCALAPPDATA%\Comet-WebView2`.
 
+English is built into the application, so no language files are needed. To add or customize a translation, see the [language instructions](locales/README.md).
+
 ## Keyboard shortcuts
 
 When the toolbar shows **Keyboard captured**, the app forwards every press and release it receives for the [mapped keys](src/keyboard/keymap.rs). You can use any combination of those keys without registering a shortcut or editing a configuration file.
@@ -46,3 +48,4 @@ The Comet firmware handles the microphone, camera and other peripherals.
 | Run interface and keyboard bridge tests | Node.js 24 | `node --test "tests/*.test.mjs"` |
 
 The executable is written to `target\release\comet-webview2.exe` and the ZIP to `dist\Comet-WebView2.zip`.
+The standard MSVC ZIP contains the executable, license, and third-party notices. The LLVM-MinGW build also includes the DLLs and license it needs.

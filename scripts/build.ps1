@@ -57,11 +57,8 @@ try {
             Add-PackageFile (Join-Path $LinkerBin 'libunwind.dll') 'libunwind.dll'
             Add-PackageFile (Join-Path (Split-Path -Parent $LinkerBin) 'LICENSE.TXT') 'LLVM-MinGW-LICENSE.txt'
         }
-        foreach ($name in 'README.md','assets/comet.png','src/keyboard/keymap.rs','LICENSE','THIRD-PARTY-NOTICES.md','locales/README.md') {
+        foreach ($name in 'LICENSE','THIRD-PARTY-NOTICES.md') {
             Add-PackageFile $name $name
-        }
-        foreach ($locale in Get-ChildItem -LiteralPath locales -Filter '*.json' -File) {
-            Add-PackageFile $locale.FullName "locales/$($locale.Name)"
         }
     } finally { $package.Dispose() }
     $archive = Join-Path $dist "$product.zip"
