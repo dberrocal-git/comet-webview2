@@ -1,0 +1,36 @@
+[package]
+name = "comet-webview2"
+version = "0.1.0"
+edition = "2024"
+description = "Windows client for GL.iNet Comet KVMs with native keyboard capture"
+license = "MIT"
+publish = false
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+base64 = "0.22"
+native-tls = "0.2"
+zeroize = "1"
+uuid = { version = "1", features = ["v4"] }
+httparse = "1"
+url = "2"
+tao = { version = "0.34", default-features = false, features = ["rwh_06"] }
+wry = { version = "0.57", default-features = false }
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+    "Win32_Foundation", "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader",
+    "Win32_System_Com", "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem", "Win32_Devices_HumanInterfaceDevice"
+] }
+
+[build-dependencies]
+winresource = { version = "0.1", default-features = false }
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title data-i18n="app.connections">Connections</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/controls.js"></script>
+  <style>
+
+    html,body { min-height:100%;background:var(--canvas);font-size:14px; }
+    body { padding:45px 44px 30px; }
+    button,input { font:inherit; }
+    button { cursor:pointer;transition:background .16s,color .16s,border-color .16s,box-shadow .16s,transform .12s; }
+    button:disabled { cursor:default;opacity:.45; }
+    button:focus-visible,summary:focus-visible { outline:3px solid #0071e34a;outline-offset:3px; }
+    button:not(:disabled):active { transform:translateY(1px); }
+    header { max-width:1040px;margin:0 auto 32px;display:flex;align-items:center;gap:20px; }
+    header .grow { flex:1; }
+    h1 { font-size:34px;font-weight:650;letter-spacing:-1.2px;line-height:1.2;margin:0 0 9px; }
+    header p { margin:0;color:var(--secondary);font-size:14px; }
+    .back { border:0;background:transparent;color:var(--blue);padding:9px 0;font-size:13px;display:flex;align-items:center;gap:6px; }
+    .back svg { width:15px;height:15px; }
+    main { max-width:1040px;margin:auto;display:grid;grid-template-columns:270px minmax(0,1fr);gap:30px;align-items:start; }
+    aside { padding-top:8px; }
+    .section-label { font-size:11px;font-weight:600;letter-spacing:.7px;color:var(--muted);text-transform:uppercase;margin:0 12px 14px;display:flex;align-items:center;gap:7px; }
+    .count { letter-spacing:0;font-size:10px;background:var(--card-line);border-radius:5px;padding:1px 5px; }
+    .profile { width:100%;display:flex;align-items:center;gap:12px;text-align:left;border:1px solid transparent;border-radius:12px;background:transparent;padding:13px 12px;margin:3px 0;color:var(--ink); }
+    .profile:hover { background:var(--hover); }
+    .profile[aria-selected=true] { background:var(--selection);border-color:var(--selection-line); }
+    .device-icon { width:38px;height:38px;flex:none;position:relative;border-radius:10px;background:var(--line);color:var(--icon-ink);transition:background .16s,color .16s; }
+    .device-icon::before { content:'';position:absolute;left:9px;top:9px;width:18px;height:13px;border:1.6px solid currentColor;border-radius:3px; }
+    .device-icon::after { content:'';position:absolute;left:15px;top:24px;width:9px;height:1.6px;background:currentColor;border-radius:2px; }
+    .profile[aria-selected=true] .device-icon { background:var(--selection-icon);color:var(--selection-ink); }
+    .profile-copy { min-width:0;flex:1; }
+    .profile b { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px; }
+    .profile small { display:block;font-size:11px;color:var(--muted);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .profile[aria-selected=true] small { color:var(--selection-secondary); }
+    .new { width:100%;display:flex;align-items:center;gap:12px;margin-top:12px;border:0;border-radius:10px;background:transparent;padding:12px;color:var(--secondary);text-align:left;font-size:12px; }
+    .new:hover { background:var(--hover);color:var(--ink); }
+    .plus { width:38px;text-align:center;color:var(--secondary);font-size:23px;font-weight:300;line-height:20px; }
+    .empty { color:var(--muted);font-size:12px;line-height:1.7;padding:10px 12px; }
+    .card { background:var(--surface);border:1px solid var(--card-line);border-radius:20px;padding:32px;box-shadow:0 4px 24px #1d1d1f04,0 1px 3px #1d1d1f02;min-width:0; }
+    .card-header { display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:27px; }
+    h2 { margin:0 0 6px;font-size:21px;letter-spacing:-.45px;font-weight:620; }
+    .description { margin:0;font-size:12px;color:var(--secondary);line-height:1.6; }
+    .ready { white-space:nowrap;font-size:10px;font-weight:500;color:var(--success-ink);background:var(--success-bg);border-radius:20px;padding:5px 8px;margin-top:2px; }
+    .ready::before { content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--success-dot);margin-right:5px;vertical-align:1px; }
+    fieldset { padding:0;margin:0;border:0;min-width:0; }
+    .group { border:1px solid var(--field-line);border-radius:12px;overflow:hidden;background:var(--field); }
+    .field { display:flex;align-items:center;position:relative;gap:12px;min-height:57px;padding:10px 16px;transition:background .16s,box-shadow .16s; }
+    .field+.field { border-top:1px solid var(--card-line); }
+    .field:focus-within { box-shadow:inset 0 0 0 2px #0071e37a;background:var(--surface);z-index:1; }
+    .field-label { width:86px;flex:none;font-size:12px;color:var(--secondary); }
+    .field input { min-width:0;flex:1;border:0;outline:0;background:transparent;padding:7px 0;color:var(--ink);font-size:13px; }
+    .field input::placeholder { color:var(--placeholder); }
+    .hint { font-size:11px;line-height:1.6;color:var(--hint);margin:10px 2px 0;min-height:18px; }
+    .password-toggle { flex:none;display:grid;place-items:center;border:0;border-radius:6px;background:none;color:var(--muted);padding:5px; }
+    .password-toggle:hover { color:var(--secondary);background:var(--hover-strong); }
+    .password-toggle svg { width:17px;height:17px; }
+    .password-toggle .hide-eye { display:none; }
+    .password-toggle[data-visible=true] .show-eye { display:none; }
+    .password-toggle[data-visible=true] .hide-eye { display:block; }
+    .remember-row { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 1px 20px;border-bottom:1px solid var(--rule); }
+    .remember-text { cursor:pointer;font-size:12px; }
+    .remember-text small { display:block;color:var(--hint);font-size:11px;margin-top:4px; }
+    .switch { position:relative;display:block;width:34px;height:20px;flex:none;cursor:pointer; }
+    .switch input { position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:1; }
+    .switch-track { display:block;width:34px;height:20px;background:var(--switch-track);border-radius:20px;transition:background .18s; }
+    .switch-track::after { content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:white;box-shadow:0 1px 3px #0002;transition:transform .18s; }
+    .switch input:checked+.switch-track { background:var(--blue); }
+    .switch input:checked+.switch-track::after { transform:translateX(14px); }
+    .switch input:focus-visible+.switch-track { outline:3px solid #0071e34a;outline-offset:3px; }
+    .actions { display:flex;align-items:center;gap:10px;margin-top:23px; }
+    .actions .grow { flex:1; }
+    .primary,.secondary { border-radius:8px;padding:10px 22px;font-size:12px;font-weight:500;min-height:36px; }
+    .primary { border:1px solid var(--blue);background:var(--blue);color:white;box-shadow:0 1px 2px #005cbb1a; }
+    .primary:hover { background:var(--blue-hover); }
+    .primary[data-loading=true]::before { content:'';display:inline-block;vertical-align:-2px;margin-right:8px;width:11px;height:11px;border:1.5px solid #ffffff66;border-top-color:white;border-radius:50%;animation:spin .7s linear infinite; }
+    @keyframes spin { to {transform:rotate(360deg);} }
+    .secondary { color:var(--secondary);background:var(--canvas);border:1px solid var(--card-line); }
+    .secondary:hover { background:var(--rule); }
+    .options { position:relative;margin-right:auto; }
+    .options summary { list-style:none;cursor:pointer;color:var(--muted);display:grid;place-items:center;width:32px;height:32px;border-radius:7px; }
+    .options summary:hover,.options[open] summary { background:var(--canvas); }
+    .options summary::-webkit-details-marker { display:none; }
+    .options summary svg { width:19px;height:19px; }
+    .menu { position:absolute;left:0;bottom:40px;z-index:5;background:var(--menu);border:1px solid var(--field-line);box-shadow:0 8px 30px #00000013;border-radius:10px;padding:5px;min-width:210px; }
+    .options[open] .menu { animation:menu-enter .14s ease-out both;transform-origin:bottom left; }
+    @keyframes menu-enter { from {opacity:0;transform:translateY(3px) scale(.98);} to {opacity:1;transform:none;} }
+    .menu button { display:block;width:100%;background:none;border:0;border-radius:6px;padding:9px 10px;text-align:left;font-size:12px;color:var(--secondary); }
+    .menu button:hover { background:var(--hover-strong); }
+    .menu .danger { color:var(--danger); }
+    .notice { font-size:12px;line-height:1.6;padding:12px 15px;border-radius:9px;background:var(--notice-bg);color:var(--notice-ink);margin-bottom:22px;white-space:pre-wrap; }
+    .trust { padding:4px 0; }
+    .trust h3 { margin:0 0 12px;font-size:21px;font-weight:600;letter-spacing:-.4px; }
+    .trust p { margin:0;font-size:12px;line-height:1.7;color:var(--muted); }
+    .trust .origin { color:var(--secondary);font-weight:500;margin-bottom:14px; }
+    .trust code { display:block;word-break:break-all;padding:15px;background:var(--canvas);border-radius:9px;font-size:11px;line-height:1.8;color:var(--secondary);margin:17px 0; }
+    .trust .old { color:var(--placeholder);font-size:10px; }
+    .cancel { display:block;margin:20px auto 0;color:var(--muted);border:0;background:none;font-size:12px; }
+    .cancel:hover { color:var(--blue); }
+    .foot { display:flex;align-items:center;justify-content:center;gap:6px;max-width:1040px;margin:27px auto 0;font-size:11px;color:var(--hint); }
+    .foot svg { width:12px;height:12px; }
+    :root[data-page-phase=prepared] body > * { visibility:hidden; }
+    :root[data-page-phase=entering] body > * { animation:page-enter .18s cubic-bezier(.22,1,.36,1) both; }
+    :root[data-page-phase=leaving] body { pointer-events:none; }
+    :root[data-page-phase=leaving] body > * { animation:page-leave .15s ease-in both; }
+    @keyframes page-enter { from {opacity:0;transform:translateY(7px);} to {opacity:1;transform:none;} }
+    @keyframes page-leave { from {opacity:1;transform:none;} to {opacity:0;transform:translateY(-4px);} }
+    @media(max-width:1050px) { body{padding:32px 28px;}main{grid-template-columns:220px minmax(0,1fr);gap:22px;}.card{padding:27px;}h1{font-size:30px;}.ready{display:none;} }
+    @media(max-width:700px) { body{padding:24px 20px;}main{grid-template-columns:1fr;}aside{padding:0;}.card{padding:24px;}#profiles{display:flex;overflow-x:auto;gap:8px;}.profile{min-width:200px;}.new{margin-top:4px;}header{margin-bottom:22px;} }
+    @media(max-height:650px) and (min-width:701px) { body{padding-top:20px;padding-bottom:20px;}header{margin-bottom:18px;}h1{font-size:28px;}.card{padding:22px;}.card-header{margin-bottom:18px;}.field{min-height:48px;padding-top:6px;padding-bottom:6px;}.remember-row{padding-top:12px;padding-bottom:12px;}.actions{margin-top:16px;}.foot{display:none;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="grow"><h1 data-i18n="manager.title">Your devices</h1><p data-i18n="manager.subtitle">Choose a connection or add a new one.</p></div>
+    <button class="back" id="back" hidden><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 4-6 6 6 6"/></svg><span data-i18n="manager.back">Back to session</span></button>
+  </header>
+  <main>
+    <aside>
+      <div class="section-label"><span data-i18n="manager.saved">Saved</span><span id="profile-count" class="count">0</span></div>
+      <div id="profiles" data-i18n-aria-label="manager.saved" aria-label="Saved"></div>
+      <p class="empty" id="empty-list" data-i18n="manager.empty" hidden></p>
+      <button class="new" id="new"><span class="plus" aria-hidden="true">+</span><span data-i18n="manager.add">Add device</span></button>
+    </aside>
+    <section class="card">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div id="trust" class="trust" hidden>
+        <h3 id="trust-title">Verify your device</h3>
+        <p class="origin" id="trust-origin"></p><p id="trust-description"></p>
+        <code id="trust-fingerprint"></code>
+        <div id="old-certificate" hidden><p class="old" data-i18n="trust.previous">Previous fingerprint</p><code id="trust-previous" class="old"></code></div>
+        <p data-i18n="trust.hint">Check this fingerprint on your KVM before continuing.</p>
+        <div class="actions"><button class="secondary" id="trust-cancel" data-i18n="action.cancel">Cancel</button><span class="grow"></span><button class="primary" id="trust-accept" data-i18n="action.trust">Trust and connect</button></div>
+      </div>
+      <div id="editor">
+        <div class="card-header"><div><h2 id="form-title">Add device</h2><p class="description" id="form-description">Enter your KVM address and password.</p></div><span class="ready" id="ready" hidden data-i18n="manager.saved_password">Password saved</span></div>
+        <form id="form" autocomplete="off">
+          <fieldset id="fields">
+            <div class="group">
+              <label class="field"><span class="field-label" data-i18n="field.address">Address</span><input id="url" type="text" maxlength="1024" data-i18n-placeholder="field.address_placeholder" placeholder="https://192.168.1.100" spellcheck="false" required autocapitalize="off"></label>
+              <label class="field"><span class="field-label" data-i18n="field.password">Password</span><input id="password" type="password" maxlength="4096" autocomplete="new-password" data-i18n-placeholder="field.password_placeholder" placeholder="KVM password">
+                <button class="password-toggle" id="show-password" type="button" data-i18n-aria-label="password.show" aria-label="Show password" data-i18n-title="password.show" title="Show password">
+                  <svg class="show-eye" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="hide-eye" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m3 3 18 18M10 5.2A13 13 0 0 1 12 5c6.5 0 10 7 10 7a22 22 0 0 1-3 3.8M6 6.5A23 23 0 0 0 2 12s3.5 7 10 7c1.6 0 3.1-.4 4.4-1M10 10a3 3 0 0 0 4 4"/></svg>
+                </button>
+              </label>
+              <label class="field"><span class="field-label" data-i18n="field.name">Name</span><input id="name" type="text" maxlength="80" data-i18n-placeholder="field.name_placeholder" placeholder="Optional · for example, Work PC"></label>
+            </div>
+            <p id="password-hint" class="hint">Use your KVM's HTTPS address.</p>
+            <div class="remember-row">
+              <label for="remember" class="remember-text"><span data-i18n="password.remember">Remember password</span><small data-i18n="password.encrypted_hint">Stored encrypted on this PC.</small></label>
+              <label class="switch"><input id="remember" type="checkbox" checked data-i18n-aria-label="password.remember" aria-label="Remember password"><span class="switch-track" aria-hidden="true"></span></label>
+            </div>
+            <div class="actions">
+              <details class="options" id="profile-actions" hidden><summary data-i18n-aria-label="action.options" aria-label="Connection options" data-i18n-title="action.options" title="Connection options"><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></summary><div class="menu"><button type="button" id="forget" data-i18n="action.forget_password">Forget password</button><button type="button" id="delete" class="danger" data-i18n="action.delete">Delete connection</button></div></details>
+              <span class="grow"></span><button class="secondary" type="button" id="save" data-i18n="action.save">Save</button><button class="primary" type="submit" id="connect" data-i18n="action.connect">Connect</button>
+            </div>
+          </fieldset>
+        </form>
+      </div>
+      <button id="cancel" class="cancel" hidden data-i18n="action.cancel_connection">Cancel connection</button>
+    </section>
+  </main>
+  <p class="foot"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3.5" y="7" width="9" height="7" rx="2"/><path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7"/></svg><span data-i18n="footer.local">Your connections stay on this PC.</span></p>
+  <script src="/manager.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <link rel="stylesheet" href="/theme.css">
+  <script src="/controls.js"></script>
+  <style>
+
+    html,body {width:100%;height:100%;overflow:hidden;background:var(--bar);font-size:12px;}
+    body {display:flex;align-items:center;gap:12px;padding:0 18px;border-bottom:1px solid var(--bar-line);}
+    .divider {height:17px;width:1px;background:var(--divider);}
+    .group {display:flex;align-items:center;gap:7px;}
+    button,select {font:inherit;color:var(--secondary);}
+    button {cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:transparent;border:1px solid transparent;border-radius:7px;min-height:30px;padding:5px 9px;white-space:nowrap;transition:background .16s,color .16s,transform .12s;}
+    button:not(:disabled):active {transform:scale(.96);}
+    button:hover {background:var(--hover-strong);}
+    button:disabled {opacity:.4;cursor:default;}
+    button:disabled:hover {background:transparent;}
+    button:focus-visible,select:focus-visible {outline:3px solid #0071e340;outline-offset:1px;}
+    button svg {height:16px;width:16px;flex:none;pointer-events:none;}
+    button .button-label {pointer-events:none;}
+    select {max-width:200px;min-width:130px;background:transparent;border:0;border-radius:6px;padding:5px;outline:0;transition:background-color .16s,color .16s;}
+    select:hover,select:focus-visible {background:var(--hover-strong);}
+    select,option {color-scheme:inherit;} option {background:var(--surface);color:var(--ink);}
+    .connect {color:var(--blue);}
+    .connect:hover {background:var(--blue-soft);}
+    .connect[data-connected=true] {background:var(--success-bg);color:var(--success-ink);opacity:1;}
+    .connect[data-connected=true]::before {content:"";width:6px;height:6px;border-radius:50%;background:var(--success-dot);}
+    .pin {width:30px;padding:5px;}
+    .pin svg {transform:rotate(35deg);transition:transform .18s ease;}
+    .pin[aria-pressed=true] {color:var(--selection-ink);background:var(--capture-bg);}
+    .pin[aria-pressed=true] svg {transform:none;}
+    #reveal {display:none;}
+    :root[data-collapsed=true] body {padding:0;border:0;}
+    :root[data-collapsed=true] body > :not(#reveal) {display:none;}
+    :root[data-collapsed=true] #reveal {display:flex;position:absolute;left:0;right:0;bottom:0;width:100%;height:3px;min-height:0;padding:0;border:0;border-radius:0;}
+    #reveal::after {content:"";width:44px;height:2px;border-radius:2px;background:var(--hint);}
+    .capture {border-color:var(--button-line);background:var(--surface);}
+    .capture[data-active=true] {background:var(--capture-bg);border-color:var(--capture-line);color:var(--selection-ink);}
+    .capture[data-active=true] .active-dot {display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--blue);}
+    .spacer {flex:1;}
+    .stats,.section {font-size:11px;white-space:nowrap;color:var(--hint);}
+    .stats {font-variant-numeric:tabular-nums;margin-right:4px;}
+    .fullscreen,.theme-toggle {width:30px;padding:5px;}
+    @media(max-width:1000px) {.stats{display:none;}body{gap:8px;}select{max-width:160px;}}
+  .theme-toggle .sun{display:none}:root[data-theme=dark] .theme-toggle .sun{display:block}:root[data-theme=dark] .theme-toggle .moon{display:none}
+  </style>
+</head>
+<body>
+  <button id="reveal" type="button" data-i18n-aria-label="toolbar.show" aria-label="Show toolbar"></button>
+  <button id="theme-toggle" class="theme-toggle" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode"><svg class="sun" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="10" cy="10" r="3.5"/><path d="M10 1v2m0 14v2M1 10h2m14 0h2M3.6 3.6 5 5m10 10 1.4 1.4M3.6 16.4 5 15M15 5l1.4-1.4"/></svg><svg class="moon" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M16.8 12.1A7.3 7.3 0 0 1 7.9 3.2a7.3 7.3 0 1 0 8.9 8.9Z"/></svg></button>
+  <div class="divider"></div>
+  <span id="section" class="section" data-i18n="toolbar.devices">Devices</span>
+  <div id="connection-group" class="group" hidden>
+    <select id="profiles" data-i18n-aria-label="toolbar.devices" aria-label="Devices"></select>
+    <button id="connect" class="connect">Connect</button>
+    <button id="manage" data-i18n-title="toolbar.view_devices" title="View devices"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg><span data-i18n="toolbar.devices">Devices</span></button>
+  </div>
+  <span class="spacer"></span>
+  <div id="remote-controls" class="group" hidden>
+    <span class="stats"></span>
+    <button class="capture" disabled title="Keyboard capture"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="5" width="16" height="10" rx="2"/><path d="M5 8h1m2 0h1m2 0h1m2 0h1M5 11h1m2 0h1m2 0h1m2 0h1M7 13h6"/></svg><span class="active-dot"></span><span class="button-label" id="capture-label">Keyboard ready</span></button>
+  </div>
+  <button id="pin" type="button" class="pin" hidden aria-pressed="false" aria-label="Pin toolbar in full screen"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8m-7 0v5l-2.5 3v1h11v-1L13 8V3m-3 9v5"/></svg></button>
+  <button class="fullscreen" data-i18n-title="toolbar.fullscreen" title="Full screen" data-i18n-aria-label="toolbar.fullscreen" aria-label="Full screen"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3H3v4m0-4 5 5m5 9h4v-4m0 4-5-5"/></svg></button>
+  <script src="/toolbar.js"></script>
+</body>
+</html>
