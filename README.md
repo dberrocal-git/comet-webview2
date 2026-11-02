@@ -2,7 +2,7 @@
 <h1 align="center">Comet WebView2</h1>
 <p align="center">Keyboard capture for GL.iNet Comet KVM sessions on Windows</p>
 
-A browser can intercept your shortcuts. Comet WebView2 captures them in Windows and sends them to your KVM session.
+When you access your Comet KVM through a browser, the browser may handle keyboard shortcuts locally instead of sending them to the remote computer. Comet WebView2 captures keyboard input at the Windows level and forwards it to your KVM session.
 
 ## Connect
 
