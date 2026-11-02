@@ -1,0 +1,77 @@
+name: Windows build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install Rust with rustfmt
+        run: rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal --component rustfmt
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $version = ($metadata.packages | Where-Object name -EQ 'comet-webview2').version
+          if ($env:GITHUB_REF_NAME -cne "v$version") { throw "Expected release tag v$version" }
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Test Rust
+        run: cargo test --locked
+      - name: Test the interface and keyboard bridge
+        run: node --test "tests/*.test.mjs"
+      - name: Build the portable ZIP
+        shell: powershell
+        run: ./scripts/build.ps1
+      - name: Save Windows package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-package
+          path: dist/Comet-WebView2.zip
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Prepare a draft release with the tested ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$REPOSITORY" --name windows-package
+          if draft=$(gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json isDraft --jq '.isDraft'); then
+            if [ "$draft" = "true" ]; then
+              gh release upload "$RELEASE_TAG" Comet-WebView2.zip --repo "$REPOSITORY" --clobber
+            fi
+          else
+            gh release create "$RELEASE_TAG" Comet-WebView2.zip --repo "$REPOSITORY" --draft --verify-tag --generate-notes
+          fi
