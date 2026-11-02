@@ -68,10 +68,8 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$REPOSITORY" --name windows-package
-          if draft=$(gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json isDraft --jq '.isDraft'); then
-            if [ "$draft" = "true" ]; then
-              gh release upload "$RELEASE_TAG" Comet-WebView2.zip --repo "$REPOSITORY" --clobber
-            fi
+          if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" Comet-WebView2.zip --repo "$REPOSITORY" --clobber
           else
             gh release create "$RELEASE_TAG" Comet-WebView2.zip --repo "$REPOSITORY" --draft --verify-tag --generate-notes
           fi
