@@ -1,3 +1,5 @@
+// Source-level guard for literal translation keys and a few UI/keyboard contracts.
+// The regex does not discover dynamically constructed keys or render the pages.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const catalog=JSON.parse(fs.readFileSync(new URL('../locales/en.json',import.meta.url),'utf8'));

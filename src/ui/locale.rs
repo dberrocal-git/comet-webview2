@@ -1,6 +1,13 @@
+//! Startup-only translation catalog shared by native errors and bundled pages.
+//!
+//! Merge order is embedded English, optional adjacent `locales/en.json`, then
+//! the requested language. Missing keys therefore retain an English fallback.
+//! The selected catalog is serialized into each local WebView by `ui::control`.
+
 use serde::Serialize;
 use std::{collections::BTreeMap, path::Path, sync::OnceLock};
 
+/// Flat translation keys and the language actually loaded, for HTML's `lang`.
 #[derive(Clone, Serialize)]
 pub struct Catalog {
     pub language: String,
@@ -15,10 +22,15 @@ fn english() -> &'static Catalog {
             .expect("Bundled English catalog must be valid"),
     })
 }
+/// Accept a small filename-safe alphabet, not the complete BCP 47 grammar.
+/// Rejecting separators and dots keeps language selection inside `locales`.
 pub fn valid_language(code: &str) -> bool {
     (2..=16).contains(&code.len()) && code.bytes().all(|c| c.is_ascii_lowercase() || c == b'-')
 }
 impl Catalog {
+    /// Load optional UTF-8 JSON objects, tolerating missing/oversized/invalid files.
+    /// Each file must contain only string values; an invalid file is skipped whole.
+    /// Unknown keys are allowed, and failed language loads keep `language = "en"`.
     pub fn load(directory: &Path, language: &str) -> Self {
         let mut catalog = english().clone();
         let merge = |catalog: &mut Catalog, path: &Path| -> bool {
@@ -43,22 +55,28 @@ impl Catalog {
         }
         catalog
     }
+    /// Unknown keys stay visible as keys to make missing catalog entries diagnosable.
     pub fn text(&self, key: &str) -> String {
         self.strings.get(key).cloned().unwrap_or_else(|| key.into())
     }
 }
+/// Select the executable-adjacent catalog once, before constructing any views.
+/// Language changes require restarting to rebuild this immutable catalog.
 pub fn init(language: &str) {
     let directory = std::env::current_exe()
         .map(|exe| exe.with_file_name("locales"))
         .unwrap_or_else(|_| "locales".into());
     let _ = ACTIVE.set(Catalog::load(&directory, language));
 }
+/// Embedded English also supports callers reached before startup initialization.
 pub fn current() -> &'static Catalog {
     ACTIVE.get().unwrap_or_else(|| english())
 }
 pub fn tr(key: &str) -> String {
     current().text(key)
 }
+/// Replace literal `{name}` placeholders in parameter order; no markup or plural
+/// grammar is interpreted. Keep this convention aligned with `controls.js::t`.
 pub fn format(key: &str, parameters: &[(&str, &str)]) -> String {
     let mut text = tr(key);
     for (name, value) in parameters {

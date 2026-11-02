@@ -1,3 +1,9 @@
+//! WebView construction and geometry for the two bundled controls and the KVM.
+//!
+//! Local controls emit JSON commands; the device view emits a separate bridge
+//! protocol. Both become `AppEvent`s so callbacks never mutate `App` directly.
+//! Embedded assets are compiled into the executable; no frontend build is needed.
+
 pub(crate) mod locale;
 
 use crate::{
@@ -14,9 +20,16 @@ use wry::{
     NewWindowResponse, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows,
 };
 
+/// Logical pixels (DIPs); `bounds` converts these to physical child-window bounds.
 pub const TOOLBAR_HEIGHT: f64 = 48.0;
 pub const REVEAL_EDGE_HEIGHT: f64 = 3.0;
+/// WebView2's HTTPS mapping of `comet://localhost` when `with_https_scheme` is set.
+/// Keep this in sync with the custom protocol and exact local IPC URL checks.
 pub const LOCAL_ORIGIN: &str = "https://comet.localhost";
+
+/// Common browser policy: app controls own shortcuts and navigation affordances.
+/// Incognito avoids relying on a persistent browser login; Rust supplies the
+/// current session token when creating the remote view.
 fn builder(context: &mut wry::WebContext) -> WebViewBuilder<'_> {
     WebViewBuilder::new_with_web_context(context)
         .with_incognito(true)
@@ -26,6 +39,12 @@ fn builder(context: &mut wry::WebContext) -> WebViewBuilder<'_> {
         .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
 }
 
+/// Build one trusted, bundled control surface with its own command provenance.
+///
+/// Rust injects serialized settings and translations before page scripts run.
+/// The protocol serves only the listed assets, never arbitrary filesystem paths.
+/// Exact document URL and size checks gate IPC here; `app::commands` separately
+/// validates command shape and which surface may invoke it.
 pub fn control(
     window: &Window,
     context: &mut wry::WebContext,
@@ -99,6 +118,12 @@ pub fn control(
     Ok(view)
 }
 
+/// Create an initially hidden KVM view scoped to one origin and session ID.
+///
+/// The firmware expects its login token in a particular localStorage entry.
+/// JSON serialization quotes token/origin data safely for script insertion, and
+/// the top-level origin guard prevents token installation in unrelated frames.
+/// Bridge IPC is origin-checked here; the event loop rejects stale session IDs.
 pub fn remote(
     window: &Window,
     context: &mut wry::WebContext,
@@ -142,6 +167,8 @@ pub fn remote(
             }
         })
         .with_navigation_handler(move |url| {
+            // Reset capture/statistics on navigation, including a blocked attempt.
+            // This synthetic "ready" means navigation began, not video readiness.
             let _ = nav_proxy.send_event(AppEvent::Remote {
                 session,
                 message: "{\"kind\":\"ready\"}".into(),
@@ -158,10 +185,13 @@ pub fn remote(
     view.load_url(&profile.url)?;
     Ok(view)
 }
+/// Return toolbar/body rectangles for the current window DPI and visible strip.
 pub fn layout(window: &Window, visible_height: f64) -> (wry::Rect, wry::Rect) {
     let s = window.inner_size();
     bounds(s.width, s.height, window.scale_factor(), visible_height)
 }
+/// Partition physical pixels once so rounding cannot leave overlapping views.
+/// A collapsed toolbar slides above the client area while retaining its viewport.
 fn bounds(width: u32, height: u32, scale: f64, visible_height: f64) -> (wry::Rect, wry::Rect) {
     let visible = ((visible_height.clamp(REVEAL_EDGE_HEIGHT, TOOLBAR_HEIGHT) * scale).round()
         as u32)

@@ -1,3 +1,11 @@
+//! JSON persistence shared by profiles and preferences.
+//!
+//! Reads distinguish a missing file (first run) from unreadable or malformed data
+//! (an error, never an implicit reset). Updates stage a clone, write a uniquely
+//! named sibling file, then replace the destination before publishing memory.
+//! This keeps a failed save from changing the running app's state. It does not
+//! coordinate multiple app instances: the last successful replacement wins.
+
 pub(crate) mod preferences;
 pub(crate) mod profiles;
 
@@ -13,6 +21,7 @@ use windows::{
     core::PCWSTR,
 };
 
+/// Call the Windows replacement API using owned, NUL-terminated UTF-16 paths.
 fn replace_file(from: &Path, to: &Path, flags: MOVE_FILE_FLAGS) -> windows::core::Result<()> {
     let wide = |p: &Path| {
         p.as_os_str()
@@ -22,9 +31,11 @@ fn replace_file(from: &Path, to: &Path, flags: MOVE_FILE_FLAGS) -> windows::core
     };
     let src = wide(from);
     let dst = wide(to);
+    // SAFETY: Both buffers remain alive for the synchronous call and end in NUL.
     unsafe { MoveFileExW(PCWSTR(src.as_ptr()), PCWSTR(dst.as_ptr()), flags) }
 }
 
+/// Only `NotFound` means absence; invalid JSON and all other I/O errors propagate.
 fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
@@ -33,6 +44,11 @@ fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     }
 }
 
+/// Replace a JSON document without exposing a partially written destination.
+///
+/// The temporary file lives beside the destination, so replacement stays on the
+/// same volume. Flush its contents before `MoveFileExW` with write-through; report
+/// write/replacement errors and attempt cleanup of the temporary file on failure.
 pub(crate) fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     let data = serde_json::to_vec_pretty(value)?;
     let parent = path.parent().context(tr("error.profile_path"))?;
@@ -60,7 +76,10 @@ pub(crate) fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     result
 }
 
-// Publish the new state in memory only after the on-disk replacement succeeds.
+/// Commit a cloned edit to disk, then make the same state visible to callers.
+///
+/// Both an edit error and a persistence error leave `current` untouched. Keep
+/// external side effects out of `edit`: only this in-memory value is transactional.
 fn update_json<T: Clone + Serialize, R>(
     path: &Path,
     current: &mut T,

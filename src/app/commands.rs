@@ -1,3 +1,9 @@
+//! Commands accepted from the two embedded local interfaces.
+//!
+//! The JSON wire format is shared with `ui/{manager,toolbar,controls}.js`.
+//! Deserialization validates payload shapes; `allowed_from` checks which local
+//! surface may perform each action. Remote device IPC never enters this path.
+
 use super::{App, events::Surface};
 use crate::{storage::profiles::ProfileInput, ui::locale::tr};
 use anyhow::{Context, Result};
@@ -6,6 +12,8 @@ use tao::window::Fullscreen;
 use wry::WebViewExtWindows;
 use zeroize::Zeroizing;
 
+/// `kind` is a snake_case tag; field names are also part of the JS contract.
+/// Keep this free of `Debug` because `SaveProfile` carries a plaintext password.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Command {
@@ -51,6 +59,7 @@ enum Command {
 }
 
 impl Command {
+    /// Defense in depth after `ui::control` validates the sender's document URL.
     fn allowed_from(&self, surface: Surface) -> bool {
         use Command::*;
         match self {
@@ -75,8 +84,12 @@ impl Command {
 }
 
 impl App {
+    /// Apply one authorized local action and publish any resulting UI state.
+    /// Errors propagate to the event loop, which shows them in the manager.
     pub(super) fn command(&mut self, surface: Surface, message: &str) -> Result<()> {
         let command: Command = serde_json::from_str(message).context(tr("error.request"))?;
+        // The manager remains visible during its exit animation. Ignore late
+        // clicks from that outgoing form; readiness may still request a snapshot.
         if surface == Surface::Manager
             && self.manager_close_at.is_some()
             && !matches!(&command, Command::UiReady)
@@ -110,6 +123,8 @@ impl App {
                 remember,
                 connect,
             } => {
+                // Invalidate any worker before editing its profile. The worker
+                // may finish, but connection_result will discard its outcome.
                 self.pending = None;
                 let password = Zeroizing::new(password.unwrap_or_default());
                 let profile = self.store.save(ProfileInput {
@@ -123,6 +138,8 @@ impl App {
                 self.form_version += 1;
                 self.notice = Some(tr("notice.saved"));
                 if connect {
+                    // An empty field means reuse the saved password. A supplied
+                    // password also works for this login when remember is false.
                     let password = if password.is_empty() {
                         profile.password()?.context(tr("error.password_required"))?
                     } else {
@@ -173,6 +190,8 @@ impl App {
                 self.publish();
             }
             Command::Capture { enabled } => {
+                // The local switch changes a persistent preference. The remote
+                // bridge's capture message only requests a temporary acquisition.
                 self.preferences.update(|s| s.keyboard_capture = enabled)?;
                 self.click_capture(enabled);
                 self.update_toolbar();
@@ -191,6 +210,8 @@ impl App {
                 }
             }
             Command::SuspendCapture => {
+                // Opening a local selector must release keys without disabling
+                // the user's preference to capture on the next console click.
                 self.release();
             }
             Command::RevealToolbar { visible } => {
@@ -218,6 +239,7 @@ impl App {
         }
         Ok(())
     }
+    /// Select/refill the editor explicitly, invalidating pending authentication.
     fn edit(&mut self, id: Option<String>) {
         self.pending = None;
         self.selected = id;

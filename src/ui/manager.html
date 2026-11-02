@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- Local assets only: scripts stay external; inline styles below need unsafe-inline.
+       Profile values and translations must be rendered as text by the page scripts. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
   <title data-i18n="app.connections">Connections</title>
   <link rel="stylesheet" href="/theme.css">
+  <!-- Shared helpers run in head for theme setup; manager.js runs after the DOM. -->
   <script src="/controls.js"></script>
   <style>
 
@@ -103,6 +106,8 @@
     .cancel:hover { color:var(--blue); }
     .foot { display:flex;align-items:center;justify-content:center;gap:6px;max-width:1040px;margin:27px auto 0;font-size:11px;color:var(--hint); }
     .foot svg { width:12px;height:12px; }
+    /* These phases are driven by cometManager's native API. The 150 ms leave
+       must finish within MANAGER_EXIT_ANIMATION (160 ms) in app/mod.rs. */
     :root[data-page-phase=prepared] body > * { visibility:hidden; }
     :root[data-page-phase=entering] body > * { animation:page-enter .18s cubic-bezier(.22,1,.36,1) both; }
     :root[data-page-phase=leaving] body { pointer-events:none; }
@@ -128,6 +133,8 @@
     </aside>
     <section class="card">
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <!-- Pending trust replaces the editor; approval carries the native attempt ID
+           and raw fingerprint, while these code elements show formatted text only. -->
       <div id="trust" class="trust" hidden>
         <h3 id="trust-title">Verify your device</h3>
         <p class="origin" id="trust-origin"></p><p id="trust-description"></p>
@@ -153,6 +160,8 @@
             <p id="password-hint" class="hint">Use your KVM's HTTPS address.</p>
             <div class="remember-row">
               <label for="remember" class="remember-text"><span data-i18n="password.remember">Remember password</span><small data-i18n="password.encrypted_hint">Stored encrypted on this PC.</small></label>
+              <!-- The visible switch decorates a real checkbox, preserving keyboard
+                   activation, fieldset disabling, and screen-reader semantics. -->
               <label class="switch"><input id="remember" type="checkbox" checked data-i18n-aria-label="password.remember" aria-label="Remember password"><span class="switch-track" aria-hidden="true"></span></label>
             </div>
             <div class="actions">

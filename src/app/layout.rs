@@ -1,15 +1,23 @@
+//! Native child-WebView positioning and toolbar animation.
+//!
+//! Rust owns the actual bounds and timing; toolbar JS requests reveal/hide and
+//! receives layout flags for presentation. Heights here are logical pixels;
+//! `ui::layout` converts them to physical pixels using the window's current DPI.
+
 use super::App;
 use crate::ui;
 use std::time::{Duration, Instant};
 
 const TOOLBAR_ANIMATION: Duration = Duration::from_millis(160);
 
+/// Interpolates visible toolbar height, including reversals partway through.
 pub(super) struct ToolbarAnimation {
     from: f64,
     to: f64,
     started: Instant,
 }
 impl ToolbarAnimation {
+    /// Cubic ease-out, clamped to finish exactly at the requested height.
     fn sample(&self, now: Instant) -> (f64, bool) {
         let progress = (now.saturating_duration_since(self.started).as_secs_f64()
             / TOOLBAR_ANIMATION.as_secs_f64())
@@ -23,6 +31,7 @@ impl App {
     pub(super) fn auto_hide_toolbar(&self) -> bool {
         !self.manager_visible && !self.preferences.settings.toolbar_pinned
     }
+    /// Reconcile the target height and publish semantic layout flags to JS.
     pub(super) fn resize(&mut self) {
         let auto_hide = self.auto_hide_toolbar();
         let target = if auto_hide && !self.toolbar_revealed {
@@ -31,6 +40,7 @@ impl App {
             ui::TOOLBAR_HEIGHT
         };
         let now = Instant::now();
+        // Sample before changing direction to avoid jumping to the old endpoint.
         self.advance_toolbar(now);
         let current_target = self
             .toolbar_animation
@@ -50,6 +60,7 @@ impl App {
             }
         }
         self.apply_toolbar_bounds();
+        // CSS enters its collapsed state only after the native slide finishes.
         let collapsed = auto_hide && !self.toolbar_revealed && self.toolbar_animation.is_none();
         let state = serde_json::json!({
             "autoHide": auto_hide,
@@ -72,6 +83,7 @@ impl App {
         }
         false
     }
+    /// Advance from MainEventsCleared without creating a separate animation task.
     pub(super) fn animate_toolbar(&mut self) {
         if self.toolbar_animation.is_none() {
             return;
@@ -83,6 +95,7 @@ impl App {
             self.apply_toolbar_bounds();
         }
     }
+    /// Keep hidden and visible body views aligned for a seamless later switch.
     fn apply_toolbar_bounds(&self) {
         let (bar, body) = ui::layout(&self.window, self.toolbar_height);
         let _ = self.toolbar.set_bounds(bar);
@@ -93,6 +106,8 @@ impl App {
     }
 }
 
+/// Respect Windows' client-area animation setting; retain the default on failure.
+/// The HTML/CSS interfaces separately honor `prefers-reduced-motion`.
 pub(super) fn animations_enabled() -> bool {
     use windows::{
         Win32::UI::WindowsAndMessaging::{
@@ -101,6 +116,7 @@ pub(super) fn animations_enabled() -> bool {
         core::BOOL,
     };
     let mut enabled = BOOL(1);
+    // SPI_GETCLIENTAREAANIMATION writes a BOOL into the live, correctly sized value.
     unsafe {
         let _ = SystemParametersInfoW(
             SPI_GETCLIENTAREAANIMATION,

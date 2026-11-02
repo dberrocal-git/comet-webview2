@@ -1,4 +1,6 @@
 #Requires -Version 5.1
+# Build a portable Windows package from explicit inputs. See src/DEVELOPMENT.md.
+# The toolchain selects MSVC by default; gnullvm additionally needs its linker bin.
 param(
     [string]$Toolchain = 'stable-x86_64-pc-windows-msvc',
     [string]$LinkerBin
@@ -18,6 +20,7 @@ function Invoke-Cargo {
 }
 
 function Add-PackageFile($source, $relativeName) {
+    # Also materialize a convenient extracted tree; only these calls populate the ZIP.
     $destination = Join-Path $outputDir $relativeName
     [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
     Copy-Item -LiteralPath $source -Destination $destination -Force
@@ -61,6 +64,7 @@ try {
             Add-PackageFile $name $name
         }
     } finally { $package.Dispose() }
+    # Publish only a completed archive. A failed build must leave the old ZIP intact.
     $archive = Join-Path $dist "$product.zip"
     if ([IO.File]::Exists($archive)) {
         [IO.File]::Replace($tempZip, $archive, [System.Management.Automation.Language.NullString]::Value)

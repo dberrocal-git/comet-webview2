@@ -1,14 +1,29 @@
+//! Bounded HTTP/1.x response reader for the single firmware login request.
+//!
+//! This is deliberately a narrow parser rather than a reusable HTTP client: no
+//! redirects, decompression, connection pooling, or interim-response handling.
+//! `httparse` validates the status/header syntax and chunk sizes; this module owns
+//! message framing and the shared size budget for headers, body, and trailers.
+
 use crate::ui::locale::tr;
 use anyhow::{Context, Result, ensure};
 use std::io::{BufRead, BufReader, Read, Take};
 
+// Includes framing overhead, not just the decoded body or declared Content-Length.
 const MAX_RESPONSE: u64 = 1024 * 1024;
 
-// A login uses one TLS connection. Respect its HTTP framing even when the
-// server leaves the socket open, and bound headers, chunks and trailers together.
+/// Return the first response's status and unchunked body within a 1 MiB budget.
+///
+/// Honor Content-Length/chunked boundaries even if the peer keeps its socket open;
+/// only unframed bodies wait for EOF. Reject conflicting lengths, unsupported
+/// transfer encodings, and simultaneous length/chunked framing. The socket's read
+/// timeout is set by the caller. Any bytes after a framed response are irrelevant
+/// because this login connection is discarded rather than reused.
 pub(super) fn read_response(stream: impl Read) -> Result<(u16, Vec<u8>)> {
+    // One extra byte distinguishes a response at the limit from one exceeding it.
     let mut input = BufReader::new(stream).take(MAX_RESPONSE + 1);
     let head = header_block(&mut input)?;
+    // Keep header count bounded independently of the total byte limit.
     let mut fields = [httparse::EMPTY_HEADER; 64];
     let mut response = httparse::Response::new(&mut fields);
     ensure!(
@@ -54,6 +69,8 @@ pub(super) fn read_response(stream: impl Read) -> Result<(u16, Vec<u8>)> {
                     anyhow::bail!(tr("error.chunk_incomplete"));
                 };
                 if size == 0 {
+                    // Consume trailers through their terminating empty line so
+                    // truncated messages fail and trailer bytes share the budget.
                     header_block(&mut input)?;
                     break;
                 }
@@ -72,6 +89,8 @@ pub(super) fn read_response(stream: impl Read) -> Result<(u16, Vec<u8>)> {
     Ok((status, body))
 }
 
+/// Read through an empty line, for the main header block or chunked trailers.
+/// The caller supplies the bounded reader; this helper also rejects EOF mid-block.
 fn header_block(input: &mut impl BufRead) -> Result<Vec<u8>> {
     let mut block = Vec::new();
     loop {
@@ -86,6 +105,8 @@ fn header_block(input: &mut impl BufRead) -> Result<Vec<u8>> {
     }
 }
 
+/// Check the remaining budget before allocating and reading a declared length.
+/// Leave the extra sentinel byte unused so the final limit check remains valid.
 fn append_exact(input: &mut Take<impl Read>, body: &mut Vec<u8>, count: u64) -> Result<()> {
     ensure!(count < input.limit(), tr("error.response_large"));
     let start = body.len();

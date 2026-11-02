@@ -2,8 +2,10 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- Match manager.html's local-only asset policy. Dynamic values stay text. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
   <link rel="stylesheet" href="/theme.css">
+  <!-- Shared helpers apply the native theme before the body paints. -->
   <script src="/controls.js"></script>
   <style>
 
@@ -32,6 +34,8 @@
     .pin[aria-pressed=true] {color:var(--selection-ink);background:var(--capture-bg);}
     .pin[aria-pressed=true] svg {transform:none;}
     #reveal {display:none;}
+    /* Rust slides the full 48-DIP viewport upward; only its bottom 3-DIP reveal
+       target remains visible. These dimensions match ui/mod.rs's layout constants. */
     :root[data-collapsed=true] body {padding:0;border:0;}
     :root[data-collapsed=true] body > :not(#reveal) {display:none;}
     :root[data-collapsed=true] #reveal {display:flex;position:absolute;left:0;right:0;bottom:0;width:100%;height:3px;min-height:0;padding:0;border:0;border-radius:0;}
@@ -52,6 +56,8 @@
   <div class="divider"></div>
   <span id="section" class="section" data-i18n="toolbar.devices">Devices</span>
   <div id="connection-group" class="group" hidden>
+    <!-- Keep a native select: toolbar.js preserves option nodes across snapshots
+         and suspends remote keyboard capture before opening its local popup. -->
     <select id="profiles" data-i18n-aria-label="toolbar.devices" aria-label="Devices"></select>
     <button id="connect" class="connect">Connect</button>
     <button id="manage" data-i18n-title="toolbar.view_devices" title="View devices"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></svg><span data-i18n="toolbar.devices">Devices</span></button>

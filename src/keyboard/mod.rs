@@ -1,3 +1,16 @@
+//! Foreground, exclusive Windows keyboard capture and physical key translation.
+//!
+//! `app` polls [`Capture::read`] on its event-loop thread and forwards the ordered
+//! `(KeyboardEvent.code, down)` pairs to `bridge.js` in the remote WebView. This
+//! module owns only the local DirectInput device; the bridge owns the set of keys
+//! sent to the KVM. Releasing capture must therefore also call the bridge's
+//! `setCaptured(false)` to send remote key-ups (see `App::release`).
+//!
+//! Acquisition is explicit through a console click or toolbar action. Focus loss,
+//! read failures and buffer overflow end the session rather than reacquiring
+//! with an uncertain held-key state. The application may use trusted DOM typing
+//! as a fallback when exclusive acquisition fails; this module has no DOM path.
+
 mod keymap;
 
 use anyhow::{Context, Result, bail};
@@ -27,8 +40,13 @@ unsafe extern "C" {
 #[link(name = "dxguid", kind = "static", modifiers = "-bundle")]
 unsafe extern "C" {}
 
+/// A physical web key code and its pressed state; `true` is key-down.
 type Key = (&'static str, bool);
 
+/// One acquired DirectInput session, with a fresh held-key ledger.
+///
+/// Keep the parent COM interface alive for as long as its keyboard device. All
+/// calls are made by the application event loop, including destruction.
 struct Keyboard {
     hwnd: HWND,
     device: IDirectInputDevice8W,
@@ -37,7 +55,11 @@ struct Keyboard {
 }
 
 impl Keyboard {
+    /// Acquire the system keyboard exclusively while our top-level window is
+    /// foreground. Errors propagate so the caller can select basic typing mode.
     fn acquire(hwnd: HWND) -> Result<Self> {
+        // SAFETY: from_raw adopts the interface returned by a successful COM
+        // creation. SDK structures and property buffers stay live during calls.
         unsafe {
             let mut raw = ptr::null_mut();
             DirectInput8Create(
@@ -52,6 +74,8 @@ impl Keyboard {
             input.CreateDevice(&GUID_SysKeyboard, &mut device, None)?;
             let device = device.context("DirectInput keyboard missing")?;
             device.SetDataFormat(ptr::addr_of!(c_dfDIKeyboard).cast_mut())?;
+            // Buffer transitions rather than sampling current state: short
+            // presses and modifier ordering must survive between event-loop polls.
             let mut buffer = DIPROPDWORD {
                 diph: DIPROPHEADER {
                     dwSize: size_of::<DIPROPDWORD>() as u32,
@@ -75,11 +99,15 @@ impl Keyboard {
         }
     }
 
+    /// Drain one batch in device order. Any input loss is fatal to this session:
+    /// continuing could leave a modifier held on the remote computer indefinitely.
     fn read(&mut self, stats: &mut AltStats) -> Result<Vec<Key>> {
         let mut events = [DIDEVICEOBJECTDATA::default(); 64];
         let mut count = events.len() as u32;
         // The projected GetDeviceData function discards the success code that
         // indicates overflow. A lost key-up must end the capture session.
+        // SAFETY: The device is live; count bounds the output array and the element
+        // size matches DIDEVICEOBJECTDATA. The API updates count with records read.
         let hr = unsafe {
             (self.device.vtable().GetDeviceData)(
                 self.device.as_raw(),
@@ -130,6 +158,11 @@ impl Drop for Keyboard {
     }
 }
 
+/// Turn buffered device records into physical key transitions, without repeats.
+///
+/// The ledger covers all 256 DIK positions, including unmapped keys. Only mapped
+/// positions are forwarded. The second result marks physical Alt downs in this
+/// batch so `read` can neutralize the local shell's logical Alt state afterward.
 fn transitions(
     events: &[DIDEVICEOBJECTDATA],
     held_keys: &mut [bool; 256],
@@ -161,6 +194,11 @@ fn transitions(
     (changes, alt_pressed)
 }
 
+/// Cumulative diagnostics for the local Alt workaround, not a capture state.
+///
+/// `local_releases` counts inputs accepted by `SendInput`, `tagged_releases`
+/// counts observed synthetic breaks at 0x7f, and `alt_tabs` counts Tab-down
+/// records received while the physical Alt ledger is set (including repeats).
 #[derive(Default, serde::Serialize)]
 pub struct AltStats {
     local_releases: u64,
@@ -168,6 +206,11 @@ pub struct AltStats {
     alt_tabs: u64,
 }
 
+/// Local capture owner and diagnostics, retained across acquisition sessions.
+///
+/// `enabled()` reports exclusive acquisition only. The application's separate
+/// `capture_requested` flag also covers its DOM fallback and must not be inferred
+/// from this value. This type does not inject events into the remote WebView.
 pub struct Capture {
     pub alt: AltStats,
     hwnd: HWND,
@@ -177,6 +220,7 @@ pub struct Capture {
 }
 
 impl Capture {
+    /// Bind to the host's top-level HWND without acquiring the keyboard yet.
     pub fn new(hwnd: isize) -> Self {
         Self {
             alt: AltStats::default(),
@@ -186,12 +230,17 @@ impl Capture {
             last_error: None,
         }
     }
+    /// Accept focus in any child WebView belonging to the host. A child gaining
+    /// focus can blur the Tao window without the user leaving the application.
     pub fn is_foreground(&self) -> bool {
         unsafe { GetAncestor(GetForegroundWindow(), GA_ROOT) == self.hwnd }
     }
+    /// Whether an exclusive DirectInput session is currently owned.
     pub fn enabled(&self) -> bool {
         self.keyboard.is_some()
     }
+    /// Attempt acquisition and retain errors for diagnostics. The app calls this
+    /// only when inactive; on failure it can still enable its DOM typing fallback.
     pub fn acquire(&mut self) {
         match Keyboard::acquire(self.hwnd) {
             Ok(device) => {
@@ -202,9 +251,13 @@ impl Capture {
             Err(error) => self.last_error = Some(format!("{error:#}")),
         }
     }
+    /// Unacquire locally by dropping the device. The caller must separately ask
+    /// the bridge to release keys already delivered to the remote computer.
     pub fn release(&mut self) {
         self.keyboard = None;
     }
+    /// Return an empty batch when inactive; propagate device errors unchanged so
+    /// the application ends capture and releases the bridge's remote key ledger.
     pub fn read(&mut self) -> Result<Vec<Key>> {
         match &mut self.keyboard {
             Some(keyboard) => keyboard.read(&mut self.alt),

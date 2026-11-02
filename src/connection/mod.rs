@@ -1,3 +1,15 @@
+//! Blocking, certificate-pinned authentication against the Comet firmware API.
+//!
+//! The app calls `connect` on a worker thread. Each attempt opens a fresh TLS
+//! connection, inspects its leaf certificate, and either requests explicit trust
+//! or sends credentials over that same connection. This avoids trusting one
+//! observed connection and sending the password over a different, unchecked one.
+//! The returned token is handed to the remote WebView; device UI/transport setup
+//! remains the firmware's responsibility.
+//!
+//! Zeroizing wrappers scrub selected owned strings, not the HTTP response buffer,
+//! parsed JSON, or browser-owned copies of the session token.
+
 mod response;
 pub(crate) mod tls;
 
@@ -11,23 +23,35 @@ use std::{
 };
 use zeroize::Zeroizing;
 
+// Firmware API contract: profiles supply a password, not a configurable username.
 const KVM_ACCOUNT: &str = "admin";
 
+/// Result sent back to the UI thread; certificate approval triggers a new attempt.
 pub enum Outcome {
+    /// Nonempty firmware session token, zeroed when its owned wrapper is dropped.
     Authenticated(Zeroizing<String>),
+    /// No credentials have been sent; show this certificate's fingerprint first.
     TrustRequired(CertificateChange),
+    /// Localized failure suitable for the connection manager's notice text.
     Failed(String),
 }
+/// A first-use or changed-certificate challenge; `previous` supports comparison.
 pub struct CertificateChange {
     pub fingerprint: String,
     pub previous: Option<String>,
 }
+/// Run one blocking attempt, turning operational errors into a UI outcome.
+///
+/// `profile.url` must already satisfy `storage::profiles::normalize_url`. This
+/// function neither prompts nor changes the stored pin. It can finish after the
+/// app cancels/replaces a login, so the caller must reject stale attempt IDs.
 pub fn connect(profile: &Profile, password: &str) -> Outcome {
     match attempt(profile, password) {
         Ok(value) => value,
         Err(error) => Outcome::Failed(format!("{error:#}")),
     }
 }
+/// Verify identity before constructing or writing the credential-bearing POST.
 fn attempt(profile: &Profile, password: &str) -> Result<Outcome> {
     let url = url::Url::parse(&profile.url)?;
     let host = match url.host().context(locale::tr("error.host"))? {
@@ -49,12 +73,15 @@ fn attempt(profile: &Profile, password: &str) -> Result<Outcome> {
             previous: profile.certificate_sha256.clone(),
         }));
     }
+    // This URL-encoded copy contains the password too; give it the same explicit
+    // zeroizing lifetime as the caller's password rather than an ordinary String.
     let body = Zeroizing::new(
         url::form_urlencoded::Serializer::new(String::new())
             .append_pair("user", KVM_ACCOUNT)
             .append_pair("passwd", password)
             .finish(),
     );
+    // Preserve brackets for IPv6 and any explicit port in the HTTP Host header.
     let authority = &url[url::Position::BeforeHost..url::Position::AfterPort];
     write!(
         stream,
@@ -76,6 +103,8 @@ fn attempt(profile: &Profile, password: &str) -> Result<Outcome> {
             &[("status", &status.to_string())]
         )),
     }
+    // Successful HTTP status alone is insufficient: firmware also returns an
+    // application-level `ok` flag and a nested `result.token` string.
     let result: serde_json::Value =
         serde_json::from_slice(&body).context(locale::tr("error.incompatible_response"))?;
     if result["ok"] != true {
@@ -87,6 +116,12 @@ fn attempt(profile: &Profile, password: &str) -> Result<Outcome> {
         .context(locale::tr("error.no_session"))?;
     Ok(Outcome::Authenticated(Zeroizing::new(token.to_string())))
 }
+/// Connect to at most six resolved addresses, then establish inspectable TLS.
+///
+/// CA and hostname checks are deliberately disabled for self-signed device
+/// certificates. This helper alone provides no authenticated peer identity:
+/// `attempt` must compare the certificate pin before sending any HTTP bytes.
+/// TCP attempts and socket I/O have timeouts; DNS resolution itself is blocking.
 fn tls_stream(host: &str, port: u16) -> Result<TlsStream<TcpStream>> {
     let addresses = (host, port)
         .to_socket_addrs()

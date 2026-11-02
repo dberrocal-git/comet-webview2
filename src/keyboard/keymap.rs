@@ -1,5 +1,16 @@
-/// DirectInput keyboard offsets to physical key names used by the KVM.
-/// Extended keys have their own offsets, independent of Windows keyboard layout.
+//! The vocabulary shared by DirectInput capture and the firmware keyboard bridge.
+//!
+//! DIK offsets identify physical positions, not characters or Win32 virtual keys.
+//! Preserve left/right modifiers, numpad keys and extended navigation keys: the
+//! remote computer's keyboard layout decides what a physical press means. Names
+//! match web `KeyboardEvent.code` values used by `remote_keyboard_event`.
+
+/// Map a DirectInput keyboard offset to a physical key name used by the KVM.
+///
+/// Return `None` for unsupported positions instead of inventing a character or
+/// forwarding an unknown name. In particular, 0x7f is reserved by this app for the
+/// synthetic local Alt-up and must never become a remote Alt-up. When extending
+/// this table, check the firmware accepts the code and retain physical distinctions.
 pub fn code(offset: u32) -> Option<&'static str> {
     Some(match offset {
         0x01 => "Escape",

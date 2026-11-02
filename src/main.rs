@@ -1,3 +1,9 @@
+//! Windows entry point. Application coordination lives in `app`; see
+//! `DEVELOPMENT.md` for the module map and cross-language contracts.
+//!
+//! Release builds have no console, so startup failures need a native dialog
+//! that still works when the window or WebView2 could not be created.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 mod connection;
@@ -20,6 +26,7 @@ fn main() {
             .encode_utf16()
             .chain(Some(0))
             .collect();
+        // Both UTF-16 buffers are NUL-terminated and outlive the synchronous call.
         unsafe {
             MessageBoxW(
                 None,

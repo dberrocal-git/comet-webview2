@@ -49,3 +49,6 @@ The Comet firmware handles the microphone, camera and other peripherals.
 
 The executable is written to `target\release\comet-webview2.exe` and the ZIP to `dist\Comet-WebView2.zip`.
 The standard MSVC ZIP contains the executable, license, and third-party notices. The LLVM-MinGW build also includes the DLLs and license it needs.
+
+For the source map, lifecycle, Rust/JavaScript contracts and maintenance decisions,
+see [the developer guide](src/DEVELOPMENT.md).

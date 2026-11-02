@@ -1,3 +1,6 @@
+// Run the real page scripts in a minimal DOM/IPC harness, without a browser.
+// The innerHTML trap below makes unsafe rendering of stored values fail loudly;
+// visual layout, animation timing and native selector behavior need manual checks.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';

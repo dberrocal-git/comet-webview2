@@ -1,3 +1,10 @@
+//! Window-thread coordinator for connection state, child views and keyboard input.
+//!
+//! `App` is mutated only by Tao's event loop. WebView callbacks and login workers
+//! enqueue `AppEvent`s instead of sharing mutable state. `commands` handles local
+//! UI actions, `login` owns pending authentication, and `layout` positions views.
+//! See `../DEVELOPMENT.md` for lifecycle diagrams and the Rust/JS wire contracts.
+
 mod commands;
 pub(crate) mod events;
 mod layout;
@@ -33,6 +40,8 @@ use tao::{
 };
 use zeroize::Zeroizing;
 
+/// Limited telemetry/capture protocol accepted from the current device viewer.
+/// These messages cannot invoke profile, settings or certificate-trust commands.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum RemoteMessage {
@@ -41,6 +50,8 @@ enum RemoteMessage {
     Stats(ViewerStats),
 }
 
+/// Firmware bridge observations, not proof of authentication or HID delivery.
+/// A control socket can be connected with no HDMI signal (`width == 0`).
 #[derive(Default, Deserialize)]
 struct ViewerStats {
     connected: bool,
@@ -51,6 +62,7 @@ struct ViewerStats {
     #[serde(default)]
     dom_key_events: u64,
 }
+// Cover the 150 ms page exit in ui/manager.html, with a small margin before hiding.
 const MANAGER_EXIT_ANIMATION: Duration = Duration::from_millis(160);
 
 // Keep the window and its identity together. A new login may be pending
@@ -62,6 +74,8 @@ struct Viewer {
     view: wry::WebView,
 }
 
+/// All native application state. Selected, pending and displayed profiles may
+/// differ: editing or connecting must not silently retarget a live viewer.
 struct App {
     window: Window,
     context: wry::WebContext,
@@ -72,28 +86,38 @@ struct App {
     proxy: EventLoopProxy<AppEvent>,
     store: Store,
     preferences: Preferences,
+    // Editor selection, distinct from Viewer.profile_id and PendingLogin.profile.
     selected: Option<String>,
     toolbar_revealed: bool,
     toolbar_height: f64,
     toolbar_animation: Option<ToolbarAnimation>,
+    // Logical visibility stays true until the outgoing manager animation ends.
     manager_close_at: Option<Instant>,
+    // Increment only to request an editor refill; routine publish must preserve edits.
     form_version: u64,
     manager_visible: bool,
+    // True for both exclusive DirectInput and the DOM typing fallback. The user's
+    // persistent permission is preferences.settings.keyboard_capture instead.
     capture_requested: bool,
     stats: ViewerStats,
     next_attempt: u64,
     pending: Option<PendingLogin>,
     notice: Option<String>,
+    // Grace period for remote key releases during shutdown; there is no delivery ack.
     close_at: Option<Instant>,
     diagnostics_path: Option<PathBuf>,
     last_diagnostics: Instant,
     forwarded_keys: u64,
 }
+/// Initialize Windows/WebView2 resources, then run until the window closes.
+/// Startup errors reach main's native dialog; per-command errors use the manager.
 pub fn run() -> Result<()> {
     let local_app_data = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .context(tr("error.local_app_data"))?;
     let root = local_app_data.join("Comet-WebView2");
+    // Settings must load before locale selection. Errors this early use bundled
+    // English through locale::current's pre-initialization fallback.
     let preferences = Preferences::open(root.join("settings.json"))?;
     locale::init(&preferences.settings.language);
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
@@ -159,6 +183,8 @@ pub fn run() -> Result<()> {
     };
     event_loop.run(move |event, _, flow| {
         let now = Instant::now();
+        // Poll buffered native input frequently while acquired; animations need
+        // frames, but an idle window can sleep longer. This is not a fixed FPS loop.
         let next_frame = now
             + Duration::from_millis(if app.capture.enabled() {
                 8
@@ -195,6 +221,8 @@ pub fn run() -> Result<()> {
                 }
             }
             Event::UserEvent(AppEvent::Local { surface, message }) => {
+                // Minimize the lifetime of the queued JSON copy containing a
+                // submitted password; this does not erase copies in WebView2/JS.
                 let message = Zeroizing::new(message);
                 if let Err(error) = app.command(surface, &message) {
                     app.notice = Some(format!("{error:#}"));
@@ -203,6 +231,8 @@ pub fn run() -> Result<()> {
                 }
             }
             Event::UserEvent(AppEvent::Remote { session, message }) => {
+                // Callbacks can already be queued when a viewer is replaced.
+                // Compare with the displayed viewer, not the latest login attempt.
                 if app
                     .remote
                     .as_ref()
@@ -248,6 +278,8 @@ fn small_icon_size() -> tao::dpi::PhysicalSize<u32> {
 }
 
 impl App {
+    /// Best-effort, opt-in health snapshot; counters do not log keys or secrets.
+    /// Diagnostic write errors must not interrupt a working KVM session.
     fn write_diagnostics(&self) {
         if let Some(path) = &self.diagnostics_path {
             let value = serde_json::json!({
@@ -270,6 +302,7 @@ impl App {
             let _ = crate::storage::write_json(path, &value);
         }
     }
+    /// Release input before exposing local form controls; keep the viewer alive.
     fn show_manager(&mut self) {
         let enter = !self.manager_visible || self.manager_close_at.is_some();
         self.manager_close_at = None;
@@ -285,6 +318,7 @@ impl App {
         }
         let _ = self.manager.focus();
     }
+    /// Start the manager exit, or switch immediately if OS animations are disabled.
     fn show_remote(&mut self) {
         if self.manager_visible && animations_enabled() {
             let _ = self.manager.evaluate_script("window.cometManager?.leave()");
@@ -293,6 +327,7 @@ impl App {
             self.finish_show_remote();
         }
     }
+    /// Complete the visibility switch and focus the viewer, without arming capture.
     fn finish_show_remote(&mut self) {
         self.manager_close_at = None;
         if let Some(viewer) = &self.remote {
@@ -306,12 +341,15 @@ impl App {
             self.publish();
         }
     }
+    /// Ignore malformed/unknown firmware payloads; never treat them as local commands.
     fn remote_message(&mut self, message: &str) {
         match serde_json::from_str::<RemoteMessage>(message) {
             Ok(RemoteMessage::Capture { enabled }) => {
                 self.click_capture(enabled);
             }
             Ok(RemoteMessage::Ready) => {
+                // Navigation or a newly mounted document invalidates old bridge
+                // observations and requires a fresh click to capture.
                 self.stats = ViewerStats::default();
                 self.release();
                 self.update_toolbar();
@@ -326,6 +364,8 @@ impl App {
             Err(_) => {}
         }
     }
+    /// Arbitrate a capture request against preference, connection and window state.
+    /// `enabled` alone is intent, not permission from the remote document.
     fn click_capture(&mut self, enabled: bool) {
         if !enabled
             || !self.preferences.settings.keyboard_capture
@@ -348,6 +388,8 @@ impl App {
         self.capture_requested = true;
         // Basic mode keeps typing available if exclusive acquisition failed.
         let basic = !self.capture.enabled();
+        // Reset first so a previous DOM fallback cannot leave remote modifiers
+        // held when the user retries exclusive acquisition.
         let _ = viewer
             .view
             .evaluate_script(&format!(
@@ -356,6 +398,8 @@ impl App {
         self.update_toolbar();
     }
 
+    /// Drain ordered physical transitions and send a single JS batch per poll.
+    /// Any read error ends capture: a lost key-up could otherwise stick remotely.
     fn pump_keyboard(&mut self) {
         if !self.capture_requested {
             return;
@@ -382,6 +426,8 @@ impl App {
         }
     }
 
+    /// Release both owners: the native device and the bridge's remote held keys.
+    /// Keep repeated calls harmless and leave the persistent preference unchanged.
     fn release(&mut self) {
         let was_active = self.capture_requested;
         self.capture_requested = false;
@@ -395,6 +441,7 @@ impl App {
             self.update_toolbar();
         }
     }
+    /// Publish connection/capture status separately from the profile/editor state.
     fn update_toolbar(&self) {
         let state = serde_json::json!({
             "online": self.stats.connected,
@@ -406,6 +453,8 @@ impl App {
             .toolbar
             .evaluate_script(&format!("window.cometToolbar?.update({state})"));
     }
+    /// Send a complete local UI snapshot using public profiles only.
+    /// JS refills the form only when form_version changes, preserving ongoing edits.
     fn publish(&mut self) {
         self.resize();
         let state = serde_json::json!({
@@ -427,6 +476,8 @@ impl App {
             .evaluate_script(&format!("window.cometToolbar?.profiles({state})"));
         self.update_toolbar();
     }
+    /// Match the live session to a saved profile only while its URL still agrees.
+    /// Editing/deleting a profile does not disconnect or relabel its existing viewer.
     fn viewer_id(&self) -> Option<&str> {
         let viewer = self.remote.as_ref()?;
         self.store

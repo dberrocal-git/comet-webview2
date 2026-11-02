@@ -1,7 +1,13 @@
+// Connection editor and certificate review for the trusted local manager page.
+// Rust publishes public profile metadata (never saved plaintext passwords), and
+// this page sends commands defined by app/commands.rs through cometUI.ipc.
 (() => {
   const {$, t, ipc, setHint, profileList} = window.cometUI;
+  // current is the form's profile ID; version tracks explicit native refills.
+  // state is the last snapshot, used to bind certificate approval to its attempt.
   let current = null, version = -1, state = null, formAnimation = null;
   const renderRows = profileList($('profiles'), createProfileRow);
+  // Formatting is display-only. Approval sends the unformatted native fingerprint.
   const fingerprint = value => (value || '').toUpperCase().match(/.{1,2}/g)?.join(':') || '';
   function showPassword(visible) {
     $('password').type = visible ? 'text' : 'password';
@@ -9,6 +15,8 @@
     button.dataset.visible = String(visible);
     setHint(button, visible ? 'password.hide' : 'password.show');
   }
+  // Empty password means keep/use the stored credential, as resolved by Rust.
+  // A refill always clears typed plaintext and resets the visibility toggle.
   function fill(profile) {
     current = profile?.id || null;
     $('form-title').textContent = t(profile ? 'manager.connect_title' : 'manager.add');
@@ -28,6 +36,8 @@
     $('profile-actions').open = false;
     $('forget').hidden = !profile?.has_password;
   }
+  // Profile names and addresses are untrusted data, so construct DOM nodes and
+  // assign textContent rather than interpolating HTML. The click keeps a stable ID.
   function createProfileRow(id) {
     const node = document.createElement('button');
     node.className = 'profile';
@@ -53,6 +63,10 @@
     });
   }
 
+  // Native API: prepare/enter/leave mirror app/mod.rs's child-view transition;
+  // update receives App::publish's full snapshot. The native close deadline must
+  // cover the leave animation; Rust ignores manager actions during that exit,
+  // except the ui_ready handshake.
   window.cometManager = Object.freeze({
     prepare() {
       document.documentElement.dataset.pagePhase = 'prepared';
@@ -91,6 +105,8 @@
       $('connect').dataset.loading = String(next.busy);
       $('trust').hidden = !next.trust;
       $('editor').hidden = !!next.trust;
+      // Certificate review replaces the editor while the pending login is paused.
+      // This page displays the decision; native code checks the attempt and pin.
       if (next.trust) {
         $('trust-title').textContent =
             t(next.trust.previous ? 'trust.changed_title' : 'trust.new_title');
@@ -103,6 +119,9 @@
       }
     }
   });
+  // Browser constraints help the user; storage::profiles validates again natively.
+  // Send the typed credential once and clear the input after submission. Clearing
+  // a DOM value reduces its lifetime but does not guarantee JavaScript memory erasure.
   function save(connect) {
     if (!$('form').reportValidity())
       return;
@@ -133,5 +152,7 @@
     ipc({kind: 'trust_certificate', attempt, fingerprint});
   };
   $('show-password').onclick = () => showPassword($('password').type !== 'text');
+  // Ask Rust to replay state after handlers/API exist; earlier script calls may
+  // have arrived before this document finished loading.
   ipc({kind: 'ui_ready'});
 })();

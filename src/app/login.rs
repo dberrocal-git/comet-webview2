@@ -1,3 +1,9 @@
+//! Asynchronous authentication and promotion of a successful login to a viewer.
+//!
+//! Workers own cloned inputs and send outcomes back through `AppEvent`. Cancelling
+//! drops `pending`, not the worker thread; attempt IDs make late results inert.
+//! The previous viewer remains available while another login is in progress.
+
 use super::{App, Viewer, events::AppEvent};
 use crate::{
     connection::{self, CertificateChange, Outcome},
@@ -8,6 +14,8 @@ use anyhow::Result;
 use tao::event_loop::EventLoopProxy;
 use zeroize::Zeroizing;
 
+/// One login, optionally paused for explicit certificate approval.
+/// The password stays available for the retry after the certificate is pinned.
 pub(super) struct PendingLogin {
     attempt: u64,
     profile: Profile,
@@ -16,6 +24,8 @@ pub(super) struct PendingLogin {
 }
 
 impl PendingLogin {
+    /// Perform blocking DNS/TCP/TLS/HTTP work away from the window thread.
+    /// Dropping the app or replacing the attempt does not interrupt this work.
     fn start(&self, proxy: EventLoopProxy<AppEvent>) {
         let attempt = self.attempt;
         let profile = self.profile.clone();
@@ -26,6 +36,7 @@ impl PendingLogin {
         });
     }
 
+    /// Export only certificate-review data; never serialize the pending login.
     pub(super) fn trust_prompt(&self) -> Option<serde_json::Value> {
         let change = self.challenge.as_ref()?;
         Some(serde_json::json!({
@@ -34,6 +45,7 @@ impl PendingLogin {
         }))
     }
 
+    /// Bind approval to both the current attempt and the observed certificate.
     fn awaiting(&self, attempt: u64, fingerprint: &str) -> bool {
         self.attempt == attempt
             && self
@@ -44,6 +56,7 @@ impl PendingLogin {
 }
 
 impl App {
+    /// Replace the pending login, keeping any existing viewer hidden and intact.
     pub(super) fn begin(&mut self, profile: Profile, password: Zeroizing<String>) {
         self.show_manager();
         self.next_attempt += 1;
@@ -59,6 +72,8 @@ impl App {
         self.publish();
     }
 
+    /// Persist explicit trust before retrying on a fresh TLS connection.
+    /// The retry checks the new connection's certificate before sending a password.
     pub(super) fn approve_certificate(&mut self, attempt: u64, fingerprint: String) -> Result<()> {
         let Some(login) = self
             .pending
@@ -76,6 +91,7 @@ impl App {
         Ok(())
     }
 
+    /// Consume only the current attempt; stale/cancelled outcomes are dropped.
     pub(super) fn connection_result(&mut self, attempt: u64, outcome: Outcome) {
         if self.close_at.is_some() {
             return;
@@ -101,6 +117,8 @@ impl App {
         self.publish();
     }
 
+    /// Build the replacement first so a construction error leaves the old viewer.
+    /// Release keys against the old bridge before assigning the new `Viewer`.
     fn open_session(&mut self, session: u64, profile: Profile, token: &str) -> Result<()> {
         let view = ui::remote(
             &self.window,

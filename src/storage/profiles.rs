@@ -1,3 +1,11 @@
+//! Versioned device profiles and Windows-account-bound saved passwords.
+//!
+//! `connections.json` contains names, canonical HTTPS origins, certificate pins,
+//! and base64-encoded DPAPI ciphertext. Only `PublicProfile` crosses into local
+//! UI state; plaintext passwords are recovered on demand into zeroizing owners.
+//! DPAPI optional entropy binds each ciphertext to its profile ID and URL. That
+//! binding is public context, not another secret, and its format must stay stable.
+
 use super::{read_json, update_json};
 use crate::ui::locale::tr;
 use anyhow::{Context, Result, bail};
@@ -13,14 +21,20 @@ use windows::Win32::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
+/// Persisted device identity. Construct normal application profiles via `Store`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Profile {
+    /// Stable UUID used by UI commands, last selection, and the DPAPI binding.
     pub id: String,
     pub name: String,
+    /// Canonical HTTPS root URL, including an optional non-default port.
     pub url: String,
+    /// Base64 DPAPI blob; never send this field to a WebView.
     pub encrypted_password: Option<String>,
+    /// User-approved SHA-256 of the complete leaf certificate's DER bytes.
     pub certificate_sha256: Option<String>,
 }
+/// Schema version is explicit: unsupported files require a deliberate migration.
 #[derive(Clone, Serialize, Deserialize)]
 struct Config {
     version: u32,
@@ -37,6 +51,7 @@ impl Config {
     }
 }
 
+/// UI projection that reveals password presence without exposing its ciphertext.
 #[derive(Serialize)]
 pub struct PublicProfile<'a> {
     pub id: &'a str,
@@ -46,10 +61,12 @@ pub struct PublicProfile<'a> {
     pub certificate_sha256: &'a Option<String>,
 }
 impl Profile {
+    /// Changing either identity component invalidates an existing DPAPI blob.
     fn binding(&self) -> String {
         // Keep this versioned prefix stable; DPAPI needs the same entropy to decrypt saved passwords.
         format!("Comet-WebView2/v1|{}|{}", self.id, self.url)
     }
+    /// Borrow the fields safe to include in the manager and toolbar snapshots.
     pub fn public(&self) -> PublicProfile<'_> {
         PublicProfile {
             id: &self.id,
@@ -59,6 +76,10 @@ impl Profile {
             certificate_sha256: &self.certificate_sha256,
         }
     }
+    /// Decrypt only when needed; an unavailable Windows account or bad blob errors.
+    ///
+    /// The returned owned string is zeroed on drop. Callers should keep it wrapped
+    /// and avoid logging it or retaining ordinary `String` copies.
     pub fn password(&self) -> Result<Option<Zeroizing<String>>> {
         self.encrypted_password
             .as_ref()
@@ -67,18 +88,26 @@ impl Profile {
     }
 }
 
+/// Edit request; an empty password can mean "keep the existing saved password".
 pub struct ProfileInput<'a> {
     pub id: Option<String>,
     pub name: String,
     pub url: String,
     pub password: &'a str,
+    /// If false, discard saved credentials even when the password field is empty.
     pub remember: bool,
 }
+/// Persisted profile collection with copy-on-write commits for all mutations.
 pub struct Store {
     path: PathBuf,
     config: Config,
 }
 impl Store {
+    /// Load version 1 and validate URL/pin shape before any profile can be used.
+    ///
+    /// A missing file starts with no trusted devices and is written on first
+    /// mutation. Stored URLs must already be canonical: silently rewriting one
+    /// would change the DPAPI binding. Passwords are not decrypted during loading.
     pub fn open(path: PathBuf) -> Result<Self> {
         let mut config = read_json(&path)
             .with_context(|| tr("error.config_read"))?
@@ -102,18 +131,29 @@ impl Store {
         }
         Ok(Self { path, config })
     }
+    /// Profiles retain their insertion order for the UI list.
     pub fn all(&self) -> &[Profile] {
         &self.config.profiles
     }
+    /// Look up an optional selection without treating absence as an error.
     pub fn find(&self, id: &str) -> Option<&Profile> {
         self.all().iter().find(|profile| profile.id == id)
     }
+    /// Resolve a command's required profile or return a localized missing error.
     pub fn get(&self, id: &str) -> Result<&Profile> {
         self.find(id).with_context(|| tr("error.profile_missing"))
     }
+    /// Last successfully opened profile; callers must tolerate a missing target.
     pub fn last(&self) -> Option<&str> {
         self.config.last_profile_id.as_deref()
     }
+    /// Create or edit a profile, then return its committed snapshot.
+    ///
+    /// Changing the canonical URL clears certificate trust and previous saved
+    /// credentials. With `remember`, a nonempty password stores a new ciphertext;
+    /// an empty password preserves the old one only on an unchanged URL. Without
+    /// `remember`, the saved password is removed. Metadata edits therefore never
+    /// need to read a saved password back into the UI's input field.
     pub fn save(&mut self, input: ProfileInput<'_>) -> Result<Profile> {
         let url = normalize_url(&input.url)?;
         let name = if input.name.trim().is_empty() {
@@ -164,6 +204,7 @@ impl Store {
             Ok(profile.clone())
         })
     }
+    /// Delete a profile and clear last selection if it referred to that profile.
     pub fn delete(&mut self, id: &str) -> Result<()> {
         self.get(id)?;
         self.update(|config| {
@@ -174,18 +215,23 @@ impl Store {
             Ok(())
         })
     }
+    /// Remove only the saved password; keep the device address and certificate pin.
     pub fn forget(&mut self, id: &str) -> Result<()> {
         self.update(|config| {
             config.profile_mut(id)?.encrypted_password = None;
             Ok(())
         })
     }
+    /// Persist an approved fingerprint; the login layer validates the challenge.
+    ///
+    /// Callers pass the lowercase fingerprint produced by `connection::tls`.
     pub fn pin(&mut self, id: &str, pin: String) -> Result<()> {
         self.update(|config| {
             config.profile_mut(id)?.certificate_sha256 = Some(pin);
             Ok(())
         })
     }
+    /// Remember an opened session's profile, without modifying credentials/trust.
     pub fn connected(&mut self, id: &str) -> Result<()> {
         self.update(|config| {
             config.last_profile_id = Some(id.into());
@@ -197,6 +243,12 @@ impl Store {
     }
 }
 
+/// Accept an HTTPS device root, adding the scheme when omitted.
+///
+/// Reject credentials, paths and queries so login and navigation share one
+/// unambiguous origin. A fragment (including the firmware's hash route) is removed
+/// because it does not identify a different device. The canonical result is also
+/// part of the saved-password binding, so changes to normalization need migration.
 pub fn normalize_url(input: &str) -> Result<url::Url> {
     let input = input.trim();
     if input.len() > 1024 {
@@ -221,16 +273,20 @@ pub fn normalize_url(input: &str) -> Result<url::Url> {
     Ok(url)
 }
 
+/// Borrow a byte slice for a synchronous DPAPI call; the blob owns no allocation.
 fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
     CRYPT_INTEGER_BLOB {
         cbData: data.len() as u32,
         pbData: data.as_ptr() as *mut u8,
     }
 }
+/// Encrypt for the current Windows user, with profile-specific optional entropy.
 fn protect(password: &str, binding: &str) -> Result<String> {
     let mut output = CRYPT_INTEGER_BLOB::default();
     let input = blob(password.as_bytes());
     let entropy = blob(binding.as_bytes());
+    // SAFETY: Input/entropy slices remain alive during the call. Successful DPAPI
+    // output is read for its reported length and released with LocalFree.
     unsafe {
         CryptProtectData(
             &input,
@@ -250,6 +306,7 @@ fn protect(password: &str, binding: &str) -> Result<String> {
         Ok(encoded)
     }
 }
+/// Decode and decrypt, then scrub DPAPI's plaintext buffer before freeing it.
 fn unprotect(value: &str, binding: &str) -> Result<Zeroizing<String>> {
     let bytes = STANDARD
         .decode(value)
@@ -257,6 +314,9 @@ fn unprotect(value: &str, binding: &str) -> Result<Zeroizing<String>> {
     let input = blob(&bytes);
     let entropy = blob(binding.as_bytes());
     let mut output = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: Input/entropy slices outlive the call. The DPAPI-allocated output
+    // stays valid until LocalFree; copy valid UTF-8 and wipe the original even
+    // when UTF-8 validation fails.
     unsafe {
         CryptUnprotectData(
             &input,

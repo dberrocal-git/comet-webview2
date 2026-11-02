@@ -1,3 +1,6 @@
+// Execute the injected bridge with a fake firmware document and transports.
+// Assertions cover ordered key messages, capture/release and origin isolation;
+// they do not exercise DirectInput, WebView2 or actual remote HID delivery.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
