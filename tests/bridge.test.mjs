@@ -72,6 +72,18 @@ function harness(origin='https://192.0.2.10',allowedOrigin='https://192.0.2.10')
   h.listeners.get('keydown')({...event,isTrusted:false});assert.equal(h.messages.length,2);
   h.native.setCaptured(false);h.listeners.get('keydown')(event);assert.equal(h.messages.length,2);
 }
+{
+  const h=harness();h.native.setCaptured(true);
+  h.native.batch([['ControlLeft',true],['AltLeft',true],['Delete',true]]);
+  // The local security screen can interrupt the chord before the key-up events.
+  h.native.setCaptured(false);h.native.setCaptured(true);
+  h.native.batch([['Digit1',true],['Digit1',false]]);
+  assert.deepEqual(h.messages.map(m=>m.value.payload),[
+    {key:'ControlLeft',state:true},{key:'AltLeft',state:true},{key:'Delete',state:true},
+    {key:'ControlLeft',state:false},{key:'AltLeft',state:false},{key:'Delete',state:false},
+    {key:'Digit1',state:true},{key:'Digit1',state:false}
+  ],'interrupted chords must be released before capture resumes');
+}
 assert.equal(harness('https://example.com').native,undefined);
 {
   const h=harness();
@@ -80,6 +92,10 @@ assert.equal(harness('https://example.com').native,undefined);
   const socket=new h.context.WebSocket('wss://192.0.2.10/api/ws');
   socket.listeners.open();h.context.tick();
   assert.equal(h.ipc.at(-1).connected,true);
+  h.native.setCaptured(true);
+  h.native.key('Digit1',true);h.context.tick();h.native.key('Digit1',false);
+  assert.deepEqual(h.messages.map(m=>m.value.payload),[{key:'Digit1',state:true},{key:'Digit1',state:false}],
+    'a missing HDMI signal must not interrupt keyboard capture');
   socket.listeners.close();h.context.tick();
   assert.equal(h.ipc.at(-1).connected,false);
 }

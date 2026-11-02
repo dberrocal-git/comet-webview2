@@ -45,7 +45,6 @@ enum RemoteMessage {
 struct ViewerStats {
     connected: bool,
     width: u32,
-    height: u32,
     hid_packets: u64,
     #[serde(default)]
     browser_lock_requests: u64,
@@ -319,7 +318,7 @@ impl App {
             }
             Ok(RemoteMessage::Stats(stats)) => {
                 self.stats = stats;
-                if self.stats.width == 0 || self.stats.height == 0 {
+                if !self.stats.connected {
                     self.release();
                 }
                 self.update_toolbar();
@@ -331,7 +330,7 @@ impl App {
         if !enabled
             || !self.preferences.settings.keyboard_capture
             || self.manager_visible
-            || self.stats.width == 0
+            || !self.stats.connected
             || self.close_at.is_some()
             || !self.capture.is_foreground()
         {
@@ -351,7 +350,9 @@ impl App {
         let basic = !self.capture.enabled();
         let _ = viewer
             .view
-            .evaluate_script(&format!("window.__cometNative?.setCaptured(true,{basic})"));
+            .evaluate_script(&format!(
+                "window.__cometNative?.setCaptured(false);window.__cometNative?.setCaptured(true,{basic})"
+            ));
         self.update_toolbar();
     }
 
@@ -400,7 +401,6 @@ impl App {
             "captured": self.capture.enabled(),
             "basic": self.capture_requested && !self.capture.enabled(),
             "capture_enabled": self.preferences.settings.keyboard_capture,
-            "width": if self.manager_visible { 0 } else { self.stats.width },
         });
         let _ = self
             .toolbar

@@ -63,7 +63,7 @@
       renderConnection();
       captureEnabled = state.capture_enabled !== false;
       setCaptured(state.captured, state.basic);
-      button.disabled = !state.width;
+      button.disabled = !online;
     },
     profiles(state) {
       const previous = select.value;

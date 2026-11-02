@@ -131,8 +131,6 @@
       lastTime = now;
       const ready = video && video.readyState >= 2;
       const width = ready ? video.videoWidth : 0, height = ready ? video.videoHeight : 0;
-      if (!width || !height)
-        setCaptured(false);
       ipc({
         kind: 'stats',
         width,

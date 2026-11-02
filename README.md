@@ -10,7 +10,7 @@ When you access your Comet KVM through a browser, the browser may handle keyboar
 
 1. Extract the entire ZIP and open `Comet-WebView2.exe`.
 2. Enter the Comet’s HTTPS address and password, then click **Connect**. On first use, verify the certificate fingerprint before selecting **Trust and connect**.
-3. Click the video to capture the keyboard. Click another window to release it. Moving the pointer alone keeps capture active.
+3. Click the console to capture the keyboard. If there is no video signal, you can also turn keyboard capture off and on using the toolbar button. Click another window to release it. Moving the pointer alone keeps capture active.
 
 **Remember password** saves the password encrypted for your Windows account. Profiles and settings are stored in `%LOCALAPPDATA%\Comet-WebView2`.
 
@@ -23,6 +23,8 @@ A few examples in the KVM session:
 - **Ctrl+W** closes the active tab in a browser.
 - **Alt+Tab** switches between Windows applications.
 - **Win+V** opens Windows clipboard history if enabled.
+
+Windows handles physical **Ctrl+Alt+Del** on the local PC. To send it to the remote computer, use the KVM interface. After returning from the local Windows security screen, click the console again to resume keyboard capture.
 
 Use the toolbar button to turn capture off. **Typing only** means system shortcuts may still act locally.
 

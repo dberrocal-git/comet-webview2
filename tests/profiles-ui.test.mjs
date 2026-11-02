@@ -76,11 +76,12 @@ const state={profiles:[profile],selected_id:profile.id,form_version:1,busy:false
   assert.equal(h.get('profiles').value,profile.id);
   h.get('profiles').value=profile.id;h.get('connect').onclick();
   assert.equal(h.messages.at(-1).id,profile.id);
-  h.context.cometToolbar.update({captured:true,capture_enabled:true,width:2560,height:1440,fps:60});
+  h.context.cometToolbar.update({online:true,captured:true,capture_enabled:true});
   assert.equal(h.get('capture-label').textContent,'Keyboard captured');
+  assert.equal(h.get('.capture').disabled,false,'capture is available while connected without video');
   h.get('.capture').onclick();
   assert.equal(h.messages.at(-1).enabled,false,'the manual switch must disable automatic capture');
-  h.context.cometToolbar.update({captured:false,capture_enabled:false,width:2560,height:1440,fps:60});
+  h.context.cometToolbar.update({online:true,captured:false,capture_enabled:false});
   assert.equal(h.get('capture-label').textContent,'Keyboard off');
   h.get('theme-toggle').onclick();assert.equal(h.messages.at(-1).kind,'toggle_theme');
   h.context.cometUI.setTheme('light');assert.equal(h.context.document.documentElement.dataset.theme,'light');
@@ -120,6 +121,7 @@ assert.ok(!fs.readFileSync(new URL('../src/ui/manager.html',import.meta.url),'ut
   select.value=profile.id;select.onchange();
   assert.equal(connect.dataset.connected,'true');
   toolbar.update({online:false});
+  assert.equal(h.get('.capture').disabled,true,'capture is unavailable when disconnected');
   assert.equal(connect.disabled,false,'a dropped connection can be reopened');
   toolbar.profiles({...session,viewer_id:null,selected_id:'missing',profiles:[]});
   assert.equal(select.children.length,0);

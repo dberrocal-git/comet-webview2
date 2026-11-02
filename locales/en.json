@@ -52,7 +52,7 @@
   "capture.basic": "Typing only",
   "capture.ready": "Keyboard enabled",
   "capture.off": "Keyboard off",
-  "capture.enabled_hint": "Keyboard capture is enabled. Click the video to capture. Click another window to release.",
+  "capture.enabled_hint": "Keyboard capture is enabled. Click the console to capture, or turn capture off and on to capture without video. Click another window to release.",
   "capture.disabled_hint": "Keyboard capture is disabled. Click to enable it.",
   "theme.light": "Switch to light mode",
   "theme.dark": "Switch to dark mode",
