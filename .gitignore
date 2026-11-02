@@ -1,0 +1,16 @@
+/target/
+/.inspect/
+/dist/
+*.log
+
+# Local credentials, WebView2 profiles and manual test output
+.env
+.env.*
+*.pfx
+*.pem
+*.key
+*.WebView2/
+WebView2/
+connections.json
+settings.json
+keyboard-health.json
