@@ -43,7 +43,7 @@ try {
     Invoke-Cargo build --locked --release --target $target
 
     # MSVC links the WebView2 loader statically. Only LLVM-MinGW needs its DLL.
-    $metadataArgs = if ($target -like '*gnullvm') { '--filter-platform', $target } else { '--no-deps' }
+    $metadataArgs = @(if ($target -like '*gnullvm') { '--filter-platform', $target } else { '--no-deps' })
     $metadata = Invoke-Cargo metadata --locked --format-version 1 @metadataArgs | ConvertFrom-Json
     [IO.Directory]::CreateDirectory($dist) | Out-Null
     # Only these build inputs enter the ZIP, even when dist contains older or private files.
